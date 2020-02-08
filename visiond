@@ -1,8 +1,8 @@
-#!/srv/maverick/software/python/bin/python3
+#!/usr/bin/env python3
 
-# (c) 2016-2017 Fnoop
-# http://github.com/goodrobots/maverick
-# This is an experimental daemon that controls a video source, transmutes formats and transmits it over wireless
+# (c) 2016-2020 GoodRobots
+# http://github.com/goodrobots/visiond
+# This is a simpoe project that controls a video source, transmutes formats and transmits it over the network to various clients
 
 import io
 import os
@@ -22,6 +22,8 @@ import gi
 from importlib import import_module
 import lockfile, signal, grp
 from daemon import runner
+
+from modules.config import *
 
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
@@ -718,7 +720,11 @@ class App():
 
  
 if __name__ == "__main__":
-    print("Starting maverick-visiond")
+    print("Starting visiond")
+
+    # Setup config
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    config = visiondConfig(os.path.join(cwd, 'visiond.conf'))
 
     # Setup logging
     logger = logging.getLogger("DaemonLog")
