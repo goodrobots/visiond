@@ -7,6 +7,7 @@
 import os
 
 from modules.config import *
+from modules.logger import *
 from modules.app import *
 
 if __name__ == "__main__":
@@ -16,6 +17,9 @@ if __name__ == "__main__":
     cwd = os.path.dirname(os.path.abspath(__file__))
     config = visiondConfig(os.path.join(cwd, 'visiond.conf'))
 
+    # Setup logger
+    logger = visiondLogger(cwd, config)
+    
     # Create app instance and daemonize
-    app = visiondApp(config)
+    app = visiondApp(config, logger)
     app.run()
