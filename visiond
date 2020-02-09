@@ -27,7 +27,6 @@ from modules.config import *
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
 from gi.repository import GObject,GLib,Gst,GstRtspServer
-GObject.threads_init()
 Gst.init(None)
 
 ### Streamer Class to build up Gstreamer pipeline from in to out
