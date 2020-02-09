@@ -499,8 +499,10 @@ class App():
         while True:
             try:
                 if 'pipeline_override' in self.config.args:
+                    logger.info("pipeline_override set, constructing manual pipeline")
                     self.manualconstruct()
                 else:
+                    logger.info("pipeline_override is not set, auto-constructing pipeline")
                     self.autoconstruct()
             except ValueError as e:
                 logger.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
@@ -531,11 +533,11 @@ class App():
                 cameradev = self.config.args.camera_device
         except:
             # device not set, carry on and try to autodetect
-            for devicepath in devicepaths:
-                if self.check_input(devicepath):
+            for devicepath in sorted(devicepaths):
+                if not cameradev and self.check_input(devicepath):
                     cameradev = devicepath
                     logger.info('v4l2 device '+devicepath+' is a camera, autoselecting')
-                else:
+                elif not cameradev:
                     logger.debug('v4l2 device '+devicepath+' is not a camera, ignoring')
         if not cameradev:
             raise ValueError('Error detecting camera video device')
@@ -595,6 +597,7 @@ class App():
             pass
         if not encoder:
             encoder = "h264"
+        logger.debug("Using encoder: {}".format(encoder))
         
         # If raspberry camera detected set pixelformat to I420, otherwise set to YUY2 by default
         pixelformat = "YUY2"
@@ -606,10 +609,11 @@ class App():
         # If raw pixelformat set in config override the defaults
         if 'pixelformat' in self.config.args:
                 pixelformat = self.config.args.pixelformat
+        logger.debug("Using pixelformat: {}".format(pixelformat))
 
         # Create the stream
         try:
-            logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+self.config.args.brightness)
+            logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
             Streamer(self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
         except Exception as e:
             #logger.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
