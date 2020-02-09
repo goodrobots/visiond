@@ -15,11 +15,6 @@ from .streamer import *
 ### Main visiond App Class
 class visiondApp():
     def __init__(self, config, logger):
-        self.stdin_path = '/dev/null'
-        self.stdout_path = '/srv/maverick/var/log/vision/maverick-visiond.daemon.log'
-        self.stderr_path = '/srv/maverick/var/log/vision/maverick-visiond.daemon.log'
-        self.pidfile_path = '/srv/maverick/var/run/maverick-visiond.pid'
-        self.pidfile_timeout = 5
         self.config = config
         self.logger = logger
         self.setup_gst()
