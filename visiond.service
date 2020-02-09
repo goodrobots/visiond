@@ -6,7 +6,7 @@ StartLimitBurst=3
 
 [Service]
 TimeoutStartSec=0
-ExecStart=/srv/maverick/software/maverick/bin/maverick-visiond
+ExecStart=/srv/visiond/visiond
 User=mav
 Restart=on-failure
 RestartSec=30
