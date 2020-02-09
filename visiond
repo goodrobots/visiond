@@ -433,7 +433,7 @@ class Streamer(object):
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
         logger.info('Starting camera stream')
-        GObject.MainLoop().run()
+        GLib.MainLoop().run()
 
     def write(self,s):
         gstbuff = Gst.Buffer.new_wrapped(s)
