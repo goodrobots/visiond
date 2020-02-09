@@ -12,7 +12,6 @@ import time
 import logging
 import errno
 import re
-import configparser as ConfigParser
 import traceback
 import subprocess
 import glob
@@ -485,26 +484,22 @@ class App():
         logger.info("Starting maverick-visiond")
 
         # Get config
-        self.config = self.config_parse("/srv/maverick/config/vision/maverick-visiond.conf")
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        self.config = visiondConfig(os.path.join(cwd, 'visiond.conf'))
 
-        # If on/off switch is off, exit
-        if self.config['enable'].lower() == 'false':
-            logger.critical('Off switch is activated, exiting')
-            sys.exit(0)
-
-        if 'debug' in self.config and self.config['debug']:
+        if 'debug' in self.config.args and self.config.args.debug:
             Gst.debug_set_active(True)
-            Gst.debug_set_default_threshold(self.config['debug'])
+            Gst.debug_set_default_threshold(self.config.args.debug)
         
-        if 'retry' not in self.config or not self.config['retry']:
+        if 'retry' not in self.config.args or not self.config.args.retry:
             self.retry = 30
         else:
-            self.retry = self.config['retry']
+            self.retry = self.config.args.retry
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while True:
             try:
-                if 'pipeline_override' in self.config:
+                if 'pipeline_override' in self.config.args:
                     self.manualconstruct()
                 else:
                     self.autoconstruct()
@@ -513,11 +508,14 @@ class App():
                 time.sleep(float(self.retry))
 
     def manualconstruct(self):
+        if self.config.args.pipeline_override not in self.config.args:
+            logger.critical('manualconstruct() called but no pipeline_override config argument specified')
+            sys.exit(1)
         logger.info("Manual Pipeline Construction")
-        logger.info("Creating pipeline from config: " + self.config['pipeline_override'])
+        logger.info("Creating pipeline from config: " + self.config.args.pipeline_override)
         try:
             # Create the pipeline from config override
-            self.pipeline = Gst.parse_launch(self.config['pipeline_override'])
+            self.pipeline = Gst.parse_launch(self.config.args.pipeline_override)
             # Set pipeline to playing
             self.pipeline.set_state(Gst.State.PLAYING)
         except Exception as e:
@@ -530,8 +528,8 @@ class App():
         cameradev = None
         devicepaths = glob.glob("/dev/video*")
         try:
-            if self.config['camera_device']:
-                cameradev = self.config['camera_device']
+            if self.config.args.camera_device:
+                cameradev = self.config.args.camera_device
         except:
             # device not set, carry on and try to autodetect
             for devicepath in devicepaths:
@@ -568,8 +566,8 @@ class App():
         # If format set in config use it, otherwise autodetect
         streamtype = None
         try:
-            if self.config['format']:
-                streamtype = self.config['format']
+            if self.config.args.format:
+                streamtype = self.config.args.format
         except:
             if re.search("C920", self.card.decode()):
                 logger.info("Logitech C920 detected, forcing H264 passthrough")
@@ -592,8 +590,8 @@ class App():
         # If encoder set in config use it, otherwise set to h264
         encoder = None
         try:
-            if self.config['encoder']:
-                encoder = self.config['encoder']
+            if self.config.args.encoder:
+                encoder = self.config.args.encoder
         except:
             pass
         if not encoder:
@@ -607,13 +605,13 @@ class App():
             pixelformat = "I420"
             
         # If raw pixelformat set in config override the defaults
-        if 'pixelformat' in self.config:
-                pixelformat = self.config['pixelformat']
+        if 'pixelformat' in self.config.args:
+                pixelformat = self.config.args.pixelformat
 
         # Create the stream
         try:
-            logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config['width'])+" x "+str(self.config['height'])+" / "+str(self.config['framerate'])+"), output:"+self.config['output']+", brightness:"+self.config['brightness'])
-            Streamer(self.config['width'], self.config['height'], self.config['framerate'], streamtype, pixelformat, encoder, self.config['input'], cameradev, int(self.config['brightness']), self.config['output'], self.config['output_dest'], int(self.config['output_port']))
+            logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+self.config.args.brightness)
+            Streamer(self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
         except Exception as e:
             #logger.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
@@ -621,19 +619,6 @@ class App():
         while True:
             time.sleep(5)
 
-    def config_parse(self, path):
-        Config = ConfigParser.SafeConfigParser()
-        options = {}
-        try:
-            Config.read(path)
-            for item in Config.options("visiond"):
-                options[item] = Config.get("visiond", item)
-            logger.info("Config read from " + str(path))
-        except:
-            logger.critical("Error reading config file: " + str(path))
-            sys.exit(1)
-        return options
-        
     def camera_info(self):
         # Log capability info
         cp = v4l2.v4l2_capability() 
@@ -721,10 +706,6 @@ class App():
  
 if __name__ == "__main__":
     print("Starting visiond")
-
-    # Setup config
-    cwd = os.path.dirname(os.path.abspath(__file__))
-    config = visiondConfig(os.path.join(cwd, 'visiond.conf'))
 
     # Setup logging
     logger = logging.getLogger("DaemonLog")
