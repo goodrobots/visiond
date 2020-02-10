@@ -12,19 +12,16 @@ from fcntl import ioctl
 from .config import *
 from .streamer import *
 
+gi.require_version('Gst', '1.0')
+from gi.repository import GLib,Gst
+Gst.init(None)
+
 ### Main visiond App Class
 class visiondApp():
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
-        self.setup_gst()
 
-    def setup_gst(self):
-        gi.require_version('Gst', '1.0')
-        gi.require_version('GstRtspServer', '1.0')
-        from gi.repository import GObject,GLib,Gst,GstRtspServer
-        Gst.init(None)
-        
     def run(self):
         self.logger.handle.info("Starting maverick-visiond")
 

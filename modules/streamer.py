@@ -7,7 +7,8 @@ from .rtsp import *
 
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
-from gi.repository import GObject,GLib,Gst,GstRtspServer
+from gi.repository import GLib, Gst, GstRtspServer
+Gst.init(None)
 
 ### Streamer Class to build up Gstreamer pipeline from in to out
 class Streamer(object):
@@ -380,7 +381,7 @@ class Streamer(object):
         try:
             # Here we override RTSPMediaFactory to use the constructed object pipeline rather than the usual
             #  set_launch which parses a pipeline string.
-            self.rtspfactory = MavRTSPMediaFactory(self.pipeline)
+            self.rtspfactory = MavRTSPMediaFactory(self.pipeline, self.logger)
         except Exception as e:
             self.logger.handle.critical("Error creating rstpfactory: "+repr(e))
         
