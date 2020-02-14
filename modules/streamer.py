@@ -63,8 +63,12 @@ class Streamer(object):
             self.logger.handle.critical("Stream starting with unrecognised encoder: " + str(encoder))
             return
         
-        # Then work out which payload we want.  We only want a payload for unicast udp
-        if output == "udp" or output == "rtsp":
+        # Then work out which payload we want.
+        if output == "udp" or output == "rtsp" or output == "webrtc":
+            # For now, we fix webrtc to h264, which automatically invokes the rtp264pay that we also want
+            if output == "webrtc":
+                encoder = "h264"
+            # Now set payloads according to the encoder
             if encoder == "h264":
                 self.payload = "rtp264pay"
                 self.payload_h264()
@@ -85,6 +89,8 @@ class Streamer(object):
             self.output_rtsp(dest, port)
         elif output == "wcast":
             self.output_wcast(dest, port)
+        elif output == "webrtc":
+            self.output_webrtc()
 
         # Start the pipeline
         self.show_pipeline()
@@ -391,6 +397,13 @@ class Streamer(object):
         self.rtspserver.attach(None)
 
         self.logger.handle.info("RTSP stream running at rtsp://"+str(dest)+":"+str(port)+"/video")
+
+    def output_webrtc(self):
+        self.logger.handle.info("Attaching output 'webrtc'")
+        sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
+        self.pipeline.add(sink)
+        self.payload_attach.link(sink)
+
 
     ### Misc methods (glib introspection)
     def on_message(self, bus, message):
