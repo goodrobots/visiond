@@ -1,9 +1,13 @@
+import asyncio
 import gi
 import os
+import random
 import signal
 import subprocess
+import sys
 
 from .rtsp import *
+from .webrtc import *
 
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
@@ -403,7 +407,13 @@ class Streamer(object):
         sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
-
+        self.our_webrtcid = random.randrange(10, 10000)
+        self.our_webrtcid = 12345
+        self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.logger, self.config)
+        asyncio.get_event_loop().run_until_complete(self.webrtc.connect())
+        res = asyncio.get_event_loop().run_until_complete(self.webrtc.loop())
+        self.logger.handle.debug("WebRTC res return: {}".format(res))
+        sys.exit(res)
 
     ### Misc methods (glib introspection)
     def on_message(self, bus, message):
@@ -424,7 +434,7 @@ class Streamer(object):
 
     ### Action methods
     def start(self):
-        if self.output != "rtsp":
+        if self.output != "rtsp" and self.output != "webrtc":
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
         self.logger.handle.info('Starting camera stream')
