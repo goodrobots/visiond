@@ -41,6 +41,12 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         self.config = config
         self.logger = logging.getLogger('visiond.' + __name__)
 
+        # Attempt to redirect the default handler into our log files
+        default_server_logger = logging.getLogger('websockets.server')
+        default_server_logger.setLevel(logging.DEBUG) # TODO: Set based on options 
+        for handler in self.logger.handlers:
+            default_server_logger.addHandler(handler)
+
         self.disable_ssl = False  # TODO: pass these in as options
         self.ADDR_PORT = ("0.0.0.0", 8443) # TODO: pass these in as options
         self.certpath = os.path.dirname(__file__) # TODO: pass these in as options
