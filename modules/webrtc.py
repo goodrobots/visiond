@@ -1,7 +1,8 @@
-import threading
 import asyncio
 import json
+import logging
 import ssl
+import threading
 import websockets
 
 import gi
@@ -13,11 +14,11 @@ gi.require_version('GstSdp', '1.0')
 from gi.repository import GstSdp
 
 class MavWebRTC(threading.Thread):
-    def __init__(self, pipeline, our_id, logger, config):
+    def __init__(self, pipeline, our_id, config):
         threading.Thread.__init__(self)
         self.daemon = True
         self.pipeline = pipeline
-        self.logger = logger
+        self.logger = logging.getLogger('visiond.' + __name__)
         self.config = config
         self.conn = None
         self.peer_id = None
@@ -37,7 +38,7 @@ class MavWebRTC(threading.Thread):
         asyncio.set_event_loop(self.loop)
         res = self.loop.run_until_complete(self.main())
         self.loop.close()
-        self.logger.handle.debug("WebRTC res return: {}".format(res))
+        self.logger.debug("WebRTC res return: {}".format(res))
     
     async def main(self):
         self.tasks = []
@@ -68,7 +69,7 @@ class MavWebRTC(threading.Thread):
         sslctx = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
         self.conn = await websockets.connect(self.server, ssl=sslctx)
         await self.conn.send('HELLO %d' % self.our_id)
-        self.logger.handle.info("WebRTC: registered with signalling server, peer id {}".format(self.our_id))
+        self.logger.info("WebRTC: registered with signalling server, peer id {}".format(self.our_id))
 
     async def setup_call(self):
         await self.conn.send('SESSION {}'.format(self.peer_id))
@@ -155,7 +156,7 @@ class MavWebRTC(threading.Thread):
         trans->direction = GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY;
         """
         #pay = self.pipeline.get_by_name('pay0')
-        #self.logger.handle.debug("pay: {}".format(pay.get_caps()))
+        #self.logger.debug("pay: {}".format(pay.get_caps()))
         #direction = GstWebRTC.WebRTCRTPTransceiverDirection.SENDONLY
         #caps = Gst.caps_from_string("application/x-rtp,media=video,encoding-name=VP8/9000,payload=96")
         #self.webrtc.emit('add-transceiver', direction, caps)
@@ -163,7 +164,7 @@ class MavWebRTC(threading.Thread):
         self.webrtc.connect('on-negotiation-needed', self.on_negotiation_needed)
         self.webrtc.connect('on-ice-candidate', self.send_ice_candidate_message)
         self.webrtc.connect('pad-added', self.on_incoming_stream)
-        self.logger.handle.info("Setting WebRTC pipeline to active")
+        self.logger.info("Setting WebRTC pipeline to active")
         self.pipeline.set_state(Gst.State.PLAYING)
 
     async def handle_sdp(self, message):
@@ -190,7 +191,7 @@ class MavWebRTC(threading.Thread):
         if self.connected:
             async for message in self.conn:
                 if message == 'HELLO':
-                    self.logger.handle.info("Received registration response from signalling server: {}".format(message))
+                    self.logger.info("Received registration response from signalling server: {}".format(message))
                     self.start_pipeline()
                     #await self.setup_call()
                 elif message == 'SESSION_OK':

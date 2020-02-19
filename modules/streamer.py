@@ -1,5 +1,6 @@
 import asyncio
 import gi
+import logging
 import os
 import random
 import signal
@@ -17,7 +18,7 @@ Gst.init(None)
 
 ### Streamer Class to build up Gstreamer pipeline from in to out
 class Streamer(object):
-    def __init__(self, config, logger, width, height, framerate, format, pixelformat, encoder, input, source, brightness, output, dest, port):
+    def __init__(self, config, width, height, framerate, format, pixelformat, encoder, input, source, brightness, output, dest, port):
         self.size = 0
         self.playing = False
         self.paused = False
@@ -29,7 +30,7 @@ class Streamer(object):
         self.framerate = framerate
         self.output = output
         self.config = config
-        self.logger = logger
+        self.logger = logging.getLogger('visiond.' + __name__)
 
         # Start with creating a pipeline from source element
         if input == "appsrc":
@@ -51,7 +52,7 @@ class Streamer(object):
                 self.capstring = None
             self.stream_yuv()
         else:
-            self.logger.handle.critical("Stream starting with unrecognised video format: " + str(format))
+            self.logger.critical("Stream starting with unrecognised video format: " + str(format))
             return
         
         # Next choose the encoder
@@ -65,7 +66,7 @@ class Streamer(object):
         elif encoder == "yuv":
             self.encode_yuv()
         else:
-            self.logger.handle.critical("Stream starting with unrecognised encoder: " + str(encoder))
+            self.logger.critical("Stream starting with unrecognised encoder: " + str(encoder))
             return
         
         # Then work out which payload we want.
@@ -121,11 +122,11 @@ class Streamer(object):
                 # logger.debug("Element: "+str(res[1]))
             if res[0] == Gst.IteratorResult.DONE:
                 break
-        self.logger.handle.info("Pipeline: \"" + " ! ".join(list(reversed(pipe_elements))) +"\"")
+        self.logger.info("Pipeline: \"" + " ! ".join(list(reversed(pipe_elements))) +"\"")
         
     ### Input methods
     def input_appsrc(self):
-        self.logger.handle.info("Attaching input 'appsrc'")
+        self.logger.info("Attaching input 'appsrc'")
         self.pipeline = Gst.Pipeline.new()
         self.source = Gst.ElementFactory.make("appsrc", "source")
         self.pipeline.add(self.source)
@@ -138,7 +139,7 @@ class Streamer(object):
     def input_v4l2(self, source, brightness):
         if not source:
             source = "/dev/video0"
-        self.logger.handle.info("Attaching input 'v4l2': "+str(source))
+        self.logger.info("Attaching input 'v4l2': "+str(source))
         self.pipeline = Gst.Pipeline.new()
         self.source = Gst.ElementFactory.make("v4l2src", "v4l2-source")
         self.source.set_property("device", source)
@@ -147,7 +148,7 @@ class Streamer(object):
 
     ### Stream methods
     def stream_h264(self):
-        self.logger.handle.info("Attaching stream 'h264'")
+        self.logger.info("Attaching stream 'h264'")
         capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
         capsfilter.set_property('caps', Gst.Caps.from_string(self.capstring))
         self.pipeline.add(capsfilter)
@@ -175,7 +176,7 @@ class Streamer(object):
         self.source_attach = capsfilter
 
     def stream_mjpeg(self):
-        self.logger.handle.info("Attaching stream 'mjpeg'")
+        self.logger.info("Attaching stream 'mjpeg'")
         capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
         capsfilter.set_property('caps', Gst.Caps.from_string(self.capstring))
         self.pipeline.add(capsfilter)
@@ -190,12 +191,12 @@ class Streamer(object):
             dec = None
             # if Gst.ElementFactory.find("omxmjpegdec"):
             if Gst.ElementFactory.find("omxmjpegdecDISABLED"):
-                self.logger.handle.info("Raspberry hardware decoder detected, using omxmjpegdec as mjpeg decoder")
+                self.logger.info("Raspberry hardware decoder detected, using omxmjpegdec as mjpeg decoder")
                 dec = Gst.ElementFactory.make("omxmjpegdec", "omxmjpegdec")
             elif Gst.ElementFactory.find("jpegdec"):
                 dec = Gst.ElementFactory.make("jpegdec", "jpegdec")
             if not dec:
-                self.logger.handle.critical("Error: No jpeg decoder found for mjpeg stream, exiting")
+                self.logger.critical("Error: No jpeg decoder found for mjpeg stream, exiting")
                 sys.exit(1)
             self.pipeline.add(dec)
             if parse:
@@ -216,7 +217,7 @@ class Streamer(object):
         self.source_attach = vconvert
         
     def stream_yuv(self):
-        self.logger.handle.info("Attaching stream 'yuv'")
+        self.logger.info("Attaching stream 'yuv'")
         if self.capstring:
             capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
             capsfilter.set_property('caps', Gst.Caps.from_string(self.capstring))
@@ -237,12 +238,12 @@ class Streamer(object):
 
     ### Encoding methods
     def encode_h264(self):
-        self.logger.handle.info("Attaching encoding 'h264'")
+        self.logger.info("Attaching encoding 'h264'")
         # Try and detect encoder
         self.h264enc = None
         # Detect Raspberry/OMX
         if Gst.ElementFactory.find("omxh264enc"):
-            self.logger.handle.info("Raspberry hardware encoder detected, using omxh264enc as h264 encoder")
+            self.logger.info("Raspberry hardware encoder detected, using omxh264enc as h264 encoder")
             self.h264enc = Gst.ElementFactory.make("omxh264enc", "raspberry-h264-encode")
             self.h264enc.set_property('control-rate', 'variable')
             self.h264enc.set_property('target-bitrate', 2000000)
@@ -271,13 +272,13 @@ class Streamer(object):
             with open(os.devnull, "w") as devnull:
                 vaapi264encoder = subprocess.call(["gst-inspect-1.0", "vaapih264enc"], stdout=devnull, stderr=devnull)
             if not vaapi264encoder:
-                self.logger.handle.info("VAAPI hardware encoder detected, attempting to use vaapi as h264 encoder")
+                self.logger.info("VAAPI hardware encoder detected, attempting to use vaapi as h264 encoder")
                 self.h264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc")
         except subprocess.CalledProcessError as e:
             pass
         # Otherwise use software encoder
         if not self.h264enc:
-            self.logger.handle.info("No hardware encoder detected, using software x264 encoder")
+            self.logger.info("No hardware encoder detected, using software x264 encoder")
             self.h264enc = Gst.ElementFactory.make("x264enc", "x264-encode")
             self.h264enc.set_property('speed-preset', 1)
             self.h264enc.set_property('tune', 0x00000004)
@@ -306,11 +307,11 @@ class Streamer(object):
 
     ### Payload methods
     def payload_h264(self):
-        self.logger.handle.info("Attaching payload 'h264'")
+        self.logger.info("Attaching payload 'h264'")
         # Try and construct a parse element.  This will fail on later (1.9+) gstreamer versions, so the subsequent (if parse) code bypasses if not present
         parse = Gst.ElementFactory.make("h264parse", "h264parse")
         if parse:
-            self.logger.handle.debug('h264parse element created')
+            self.logger.debug('h264parse element created')
             self.pipeline.add(parse)
             self.encode_attach.link(parse)
         h264pay = Gst.ElementFactory.make("rtph264pay", "h264-payload")
@@ -319,15 +320,15 @@ class Streamer(object):
         h264pay.set_property("name", "pay0") # Set pay%d for rtsp stream pickup
         self.pipeline.add(h264pay)
         if parse:
-            self.logger.handle.debug('Attaching h264pay to h264parse')               
+            self.logger.debug('Attaching h264pay to h264parse')               
             parse.link(h264pay)
         else:
-            self.logger.handle.debug('Attaching h264pay direct to h264 encoder')
+            self.logger.debug('Attaching h264pay direct to h264 encoder')
             self.encode_attach.link(h264pay)
         self.payload_attach = h264pay
             
     def payload_mjpeg(self):
-        self.logger.handle.info("Attaching payload 'mjpeg'")
+        self.logger.info("Attaching payload 'mjpeg'")
         mjpegpay = Gst.ElementFactory.make("rtpjpegpay", "mjpeg-payload")
         mjpegpay.set_property("pt", 26)
         self.pipeline.add(mjpegpay)
@@ -336,7 +337,7 @@ class Streamer(object):
 
     ### Output methods
     def output_file(self, dest):
-        self.logger.handle.info("Attaching output 'file'")
+        self.logger.info("Attaching output 'file'")
         mux = Gst.ElementFactory.make("mpegtsmux", "mux")
         self.pipeline.add(mux)
         self.payload_attach.link(mux)
@@ -348,9 +349,9 @@ class Streamer(object):
     
     def output_udp(self, dest, port):
         if not dest:
-            self.logger.handle.warn("UDP destination must be set")
+            self.logger.warn("UDP destination must be set")
             return
-        self.logger.handle.info("Attaching output 'udp', sending to "+str(dest)+":"+str(port))
+        self.logger.info("Attaching output 'udp', sending to "+str(dest)+":"+str(port))
         sink = Gst.ElementFactory.make("udpsink", "udpsink")
         sink.set_property("host", dest)
         sink.set_property("port", port)
@@ -359,7 +360,7 @@ class Streamer(object):
         self.payload_attach.link(sink)
     
     def output_wcast(self, dest, port):
-        self.logger.handle.info("Attaching output 'wcast'")
+        self.logger.info("Attaching output 'wcast'")
         # Create an OS pipe so we can attach the gstream pipeline to one end, and wifibroadcast tx to the other end
         read, write = os.pipe()
         # Create an fdsink to dump the pipeline out of
@@ -371,11 +372,11 @@ class Streamer(object):
         self.payload_attach.link(sink)
         # Spawn wifibroadcast tx
         self.wcast_tx = subprocess.Popen(['/srv/maverick/software/wifibroadcast/tx','-b 8', '-r 4', '-f 1024', dest], stdin=read)
-        self.logger.handle.info("wcast tx pid:" + str(self.wcast_tx.pid))
+        self.logger.info("wcast tx pid:" + str(self.wcast_tx.pid))
         signal.signal(signal.SIGTERM, self.shutdown_tx)
 
     def output_dynudp(self):
-        self.logger.handle.info("Attaching output 'dynudp'")
+        self.logger.info("Attaching output 'dynudp'")
         sink = Gst.ElementFactory.make("dynudpsink", "dynudpsink")
         sink.set_property("sync", False)
         sink.set_property("bind-address", "0.0.0.0")
@@ -384,7 +385,7 @@ class Streamer(object):
         self.encode_attach.link(sink)
 
     def output_rtsp(self, dest, port):
-        self.logger.handle.info("Attaching output 'rtsp'")
+        self.logger.info("Attaching output 'rtsp'")
         self.rtspserver = GstRtspServer.RTSPServer()
         self.rtspserver.set_address(dest)
         self.rtspserver.set_service(str(port))
@@ -392,28 +393,28 @@ class Streamer(object):
         try:
             # Here we override RTSPMediaFactory to use the constructed object pipeline rather than the usual
             #  set_launch which parses a pipeline string.
-            self.rtspfactory = MavRTSPMediaFactory(self.pipeline, self.logger)
+            self.rtspfactory = MavRTSPMediaFactory(self.pipeline)
         except Exception as e:
-            self.logger.handle.critical("Error creating rstpfactory: "+repr(e))
+            self.logger.critical("Error creating rstpfactory: "+repr(e))
         
         # Add the /video endpoint.  More/dynamic endpoints will be added in the future
         self.rtspmounts = self.rtspserver.get_mount_points()
         self.rtspmounts.add_factory('/video', self.rtspfactory)
         self.rtspserver.attach(None)
 
-        self.logger.handle.info("RTSP stream running at rtsp://"+str(dest)+":"+str(port)+"/video")
+        self.logger.info("RTSP stream running at rtsp://"+str(dest)+":"+str(port)+"/video")
 
     def output_webrtc(self):
-        self.logger.handle.info("Creating WebRTC Signal Server")
-        self.webrtc_signal_server = MavWebRTCSignalServer(self.logger, self.config)
-        self.logger.handle.info("Attaching output 'webrtc'")
+        self.logger.info("Creating WebRTC Signal Server")
+        self.webrtc_signal_server = MavWebRTCSignalServer(self.config)
+        self.logger.info("Attaching output 'webrtc'")
         sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
         self.our_webrtcid = random.randrange(10, 10000)
         self.our_webrtcid = 12345
         
-        self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.logger, self.config)
+        self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.config)
         self.webrtc.start()
 
     ### Misc methods (glib introspection)
@@ -438,7 +439,7 @@ class Streamer(object):
         if self.output != "rtsp" and self.output != "webrtc":
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
-        self.logger.handle.info('Starting camera stream')
+        self.logger.info('Starting camera stream')
         GLib.MainLoop().run()
 
     def write(self,s):
@@ -448,7 +449,7 @@ class Streamer(object):
     def stop(self):
         self.pipeline.set_state(Gst.State.READY)
         self.playing = False
-        self.logger.handle.info('Stopping camera stream')
+        self.logger.info('Stopping camera stream')
 
     def flush(self):
         self.stop()

@@ -1,12 +1,14 @@
 import gi
+import logging
+
 gi.require_version('GstRtspServer', '1.0')
 from gi.repository import GstRtspServer
 
 ### Create an RTSP Media Factory from an existing pipeline
 class MavRTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
-    def __init__(self, pipeline, logger):
-        self.logger = logger
-        self.logger.handle.info("Overriding RTSPMediaFactory with constructed pipeline")
+    def __init__(self, pipeline):
+        self.logger = logging.getLogger('visiond.' + __name__)
+        self.logger.info("Overriding RTSPMediaFactory with constructed pipeline")
         GstRtspServer.RTSPMediaFactory.__init__(self)
         self.set_shared(True)
         #self.set_reusable(True)
@@ -18,5 +20,5 @@ class MavRTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
         self.pipeline = pipeline
 
     def do_create_element(self, url):
-        self.logger.handle.info("Creating RTSP factory element: {}".format(url))
+        self.logger.info("Creating RTSP factory element: {}".format(url))
         return self.pipeline

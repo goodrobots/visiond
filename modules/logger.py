@@ -24,7 +24,7 @@ class visiondLogger():
         else:
             self.logdest = 'both'
 
-        root = logging.getLogger('Visiond')
+        root = logging.getLogger('visiond')
         root.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 

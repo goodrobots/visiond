@@ -240,11 +240,11 @@ async def handler(ws, path):
 sslctx = None
 
 class MavWebRTCSignalServer(multiprocessing.Process):
-    def __init__(self, logger, config):
+    def __init__(self, config):
         multiprocessing.Process.__init__(self)
         self.daemon = True
         self.config = config
-        self.logger = logger
+        self.logger = logging.getLogger('visiond.' + __name__)
         self.disable_ssl = False
         self.start() # the server will self start
 
@@ -257,7 +257,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         if not self.disable_ssl:
             # Create an SSL context to be used by the websocket server
             certpath = os.path.dirname(__file__)
-            print('Using TLS with keys in {!r}'.format(certpath))
+            self.logger.info('Using TLS with keys in {!r}'.format(certpath))
             if 'letsencrypt' in certpath:
                 chain_pem = os.path.join(certpath, 'fullchain.pem')
                 key_pem = os.path.join(certpath, 'privkey.pem')
@@ -269,13 +269,13 @@ class MavWebRTCSignalServer(multiprocessing.Process):
             try:
                 sslctx.load_cert_chain(chain_pem, keyfile=key_pem)
             except FileNotFoundError:
-                print("Certificates not found, did you run generate_cert.sh?")
+                self.logger.critical("Certificates not found, did you run generate_cert.sh?")
                 sys.exit(1)
             # FIXME
             sslctx.check_hostname = False
             sslctx.verify_mode = ssl.CERT_NONE
 
-        print("Listening on https://{}:{}".format(*ADDR_PORT))
+        self.logger.info("Listening on https://{}:{}".format(*ADDR_PORT))
         # Websocket server
         wsd = websockets.serve(handler, *ADDR_PORT, ssl=sslctx, process_request=health_check,
                        # Maximum number of messages that websockets will pop
@@ -287,6 +287,8 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         self.loop.run_forever()
 
 if __name__ == "__main__":
+    print("Error: webrtc_singalserver should only be run as a module")
+    """
     import time
     root = logging.getLogger('Visiond')
     root.setLevel(logging.DEBUG)
@@ -295,3 +297,4 @@ if __name__ == "__main__":
     while True:
         time.sleep(1)
         print("in the other loop")
+    """

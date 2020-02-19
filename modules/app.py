@@ -2,6 +2,7 @@ import errno
 import gi
 import glob
 import io
+import logging
 import os
 import re
 import time
@@ -18,12 +19,12 @@ Gst.init(None)
 
 ### Main visiond App Class
 class visiondApp():
-    def __init__(self, config, logger):
+    def __init__(self, config):
         self.config = config
-        self.logger = logger
+        self.logger = logging.getLogger('visiond.' + __name__)
 
     def run(self):
-        self.logger.handle.info("Starting maverick-visiond")
+        self.logger.info("Starting maverick-visiond")
 
         if 'debug' in self.config.args and self.config.args.debug:
             Gst.debug_set_active(True)
@@ -38,21 +39,21 @@ class visiondApp():
         while True:
             try:
                 if 'pipeline_override' in self.config.args:
-                    self.logger.handle.info("pipeline_override set, constructing manual pipeline")
+                    self.logger.info("pipeline_override set, constructing manual pipeline")
                     self.manualconstruct()
                 else:
-                    self.logger.handle.info("pipeline_override is not set, auto-constructing pipeline")
+                    self.logger.info("pipeline_override is not set, auto-constructing pipeline")
                     self.autoconstruct()
             except ValueError as e:
-                self.logger.handle.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
+                self.logger.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
                 time.sleep(float(self.retry))
 
     def manualconstruct(self):
         if self.config.args.pipeline_override not in self.config.args:
-            self.logger.handle.critical('manualconstruct() called but no pipeline_override config argument specified')
+            self.logger.critical('manualconstruct() called but no pipeline_override config argument specified')
             sys.exit(1)
-        self.logger.handle.info("Manual Pipeline Construction")
-        self.logger.handle.info("Creating pipeline from config: " + self.config.args.pipeline_override)
+        self.logger.info("Manual Pipeline Construction")
+        self.logger.info("Creating pipeline from config: " + self.config.args.pipeline_override)
         try:
             # Create the pipeline from config override
             self.pipeline = Gst.parse_launch(self.config.args.pipeline_override)
@@ -75,9 +76,9 @@ class visiondApp():
             for devicepath in sorted(devicepaths):
                 if not cameradev and self.check_input(devicepath):
                     cameradev = devicepath
-                    self.logger.handle.info('v4l2 device '+devicepath+' is a camera, autoselecting')
+                    self.logger.info('v4l2 device '+devicepath+' is a camera, autoselecting')
                 elif not cameradev:
-                    self.logger.handle.debug('v4l2 device '+devicepath+' is not a camera, ignoring')
+                    self.logger.debug('v4l2 device '+devicepath+' is not a camera, ignoring')
         if not cameradev:
             raise ValueError('Error detecting camera video device')
 
@@ -101,7 +102,7 @@ class visiondApp():
             ioctl(dp, v4l2.VIDIOC_QUERYCAP, cp)
             if cp.card == "s5p-mfc-enc":
                 self.mfcdev = dp
-                self.logger.handle.info('MFC Hardware encoder detected, autoselecting '+devicepath)
+                self.logger.info('MFC Hardware encoder detected, autoselecting '+devicepath)
 
         # If format set in config use it, otherwise autodetect
         streamtype = None
@@ -110,19 +111,19 @@ class visiondApp():
                 streamtype = self.config.args.format
         except:
             if re.search("C920", self.card.decode()):
-                self.logger.handle.info("Logitech C920 detected, forcing H264 passthrough")
+                self.logger.info("Logitech C920 detected, forcing H264 passthrough")
                 streamtype = 'h264'                                                                     
             # format not set, carry on and try to autodetect
             elif self.check_format('yuv'):
-                self.logger.handle.info('Camera YUV stream available, using yuv stream')
+                self.logger.info('Camera YUV stream available, using yuv stream')
                 streamtype = 'yuv'
             # Otherwise, check for an mjpeg->h264 encoder pipeline.
             elif self.check_format('mjpeg'):
-                self.logger.handle.info('Camera MJPEG stream available, using mjpeg stream')
+                self.logger.info('Camera MJPEG stream available, using mjpeg stream')
                 streamtype = 'mjpeg'
             # Lastly look for a h264 stream
             elif self.check_format('h264'):
-                self.logger.handle.info('Camera H264 stream available, using H264 stream')
+                self.logger.info('Camera H264 stream available, using H264 stream')
                 streamtype = 'h264'
         if not streamtype:
             raise ValueError('Error detecting camera video format')
@@ -136,26 +137,26 @@ class visiondApp():
             pass
         if not encoder:
             encoder = "h264"
-        self.logger.handle.debug("Using encoder: {}".format(encoder))
+        self.logger.debug("Using encoder: {}".format(encoder))
         
         # If raspberry camera detected set pixelformat to I420, otherwise set to YUY2 by default
         pixelformat = "YUY2"
         ioctl(self.vd, v4l2.VIDIOC_QUERYCAP, cp) 
         if cp.driver == "bm2835 mmal":
-            self.logger.handle.info("Raspberry Pi Camera detected, setting pixel format to I420")
+            self.logger.info("Raspberry Pi Camera detected, setting pixel format to I420")
             pixelformat = "I420"
             
         # If raw pixelformat set in config override the defaults
         if 'pixelformat' in self.config.args:
                 pixelformat = self.config.args.pixelformat
-        self.logger.handle.debug("Using pixelformat: {}".format(pixelformat))
+        self.logger.debug("Using pixelformat: {}".format(pixelformat))
 
         # Create the stream
         try:
-            self.logger.handle.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
-            Streamer(self.config, self.logger, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
+            self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
+            Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
         except Exception as e:
-            #self.logger.handle.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
+            #self.logger.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
 
         while True:
@@ -165,8 +166,8 @@ class visiondApp():
         # Log capability info
         cp = v4l2.v4l2_capability() 
         ioctl(self.vd, v4l2.VIDIOC_QUERYCAP, cp) 
-        self.logger.handle.debug("driver: " + cp.driver.decode())
-        self.logger.handle.debug("card: " + cp.card.decode())
+        self.logger.debug("driver: " + cp.driver.decode())
+        self.logger.debug("card: " + cp.card.decode())
         self.driver = cp.driver
         self.card = cp.card
         
@@ -180,7 +181,7 @@ class visiondApp():
                 assert e.errno == errno.EINVAL
                 queryctrl.id += 1
                 continue
-            self.logger.handle.debug("Camera control: " + queryctrl.name.decode())
+            self.logger.debug("Camera control: " + queryctrl.name.decode())
             queryctrl = v4l2.v4l2_queryctrl(queryctrl.id + 1)
         queryctrl.id = v4l2.V4L2_CID_PRIVATE_BASE
         while True:
@@ -190,7 +191,7 @@ class visiondApp():
                 # no more custom controls available on this device
                 assert e.errno == errno.EINVAL
                 break
-            self.logger.handle.debug("Camera control: " + queryctrl.name.decode())
+            self.logger.debug("Camera control: " + queryctrl.name.decode())
             queryctrl = v4l2.v4l2_queryctrl(queryctrl.id + 1)
         
         # Log formats available
@@ -199,7 +200,7 @@ class visiondApp():
         capture.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
         try:
             while (ioctl(self.vd, v4l2.VIDIOC_ENUM_FMT, capture) >= 0):
-                    self.logger.handle.debug("Camera format: " + capture.description.decode())
+                    self.logger.debug("Camera format: " + capture.description.decode())
                     capture.index += 1
         except:
             pass
@@ -212,12 +213,12 @@ class visiondApp():
         input = v4l2.v4l2_input(index)
         try:
             ioctl(vd, v4l2.VIDIOC_ENUMINPUT, input)
-            self.logger.handle.debug('V4l2 device input: ' + input.name.decode() + ':' + str(input.type))
+            self.logger.debug('V4l2 device input: ' + input.name.decode() + ':' + str(input.type))
             if input.type != 2:
                 return False # If input type is not camera (2) then return false
             return True
         except Exception as e:
-            self.logger.handle.debug("Error checking input: {}".format(repr(e)))
+            self.logger.debug("Error checking input: {}".format(repr(e)))
             return False
 
     def check_format(self, format):
@@ -227,7 +228,7 @@ class visiondApp():
         available = False
         try:
             while (ioctl(self.vd, v4l2.VIDIOC_ENUM_FMT, capture) >= 0):
-                self.logger.handle.debug("Format: {} : {}".format(format, capture.description.decode()))
+                self.logger.debug("Format: {} : {}".format(format, capture.description.decode()))
                 if format.lower() == "h264":
                     if re.search('H264', capture.description.decode().lower()) or re.search('H.264', capture.description.decode().lower()):
                         available = True
