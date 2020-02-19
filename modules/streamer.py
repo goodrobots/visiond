@@ -409,11 +409,9 @@ class Streamer(object):
         self.payload_attach.link(sink)
         self.our_webrtcid = random.randrange(10, 10000)
         self.our_webrtcid = 12345
+        
         self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.logger, self.config)
-        asyncio.get_event_loop().run_until_complete(self.webrtc.connect())
-        res = asyncio.get_event_loop().run_until_complete(self.webrtc.loop())
-        self.logger.handle.debug("WebRTC res return: {}".format(res))
-        sys.exit(res)
+        self.webrtc.start()
 
     ### Misc methods (glib introspection)
     def on_message(self, bus, message):

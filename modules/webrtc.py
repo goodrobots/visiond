@@ -1,3 +1,4 @@
+import threading
 import asyncio
 import json
 import ssl
@@ -11,8 +12,10 @@ from gi.repository import GstWebRTC
 gi.require_version('GstSdp', '1.0')
 from gi.repository import GstSdp
 
-class MavWebRTC(object):
+class MavWebRTC(threading.Thread):
     def __init__(self, pipeline, our_id, logger, config):
+        threading.Thread.__init__(self)
+        self.daemon = True
         self.pipeline = pipeline
         self.logger = logger
         self.config = config
@@ -21,7 +24,46 @@ class MavWebRTC(object):
         self.our_id = our_id
         self.server = 'wss://localhost:8443'
         self.webrtc = self.pipeline.get_by_name('webrtc')
+        self.connection_timeout = 3.0 # seconds
+    
+    @property
+    def connected(self):
+        if self.con:
+            return True
+        return False
 
+    def run(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        res = self.loop.run_until_complete(self.main())
+        self.loop.close()
+        self.logger.handle.debug("WebRTC res return: {}".format(res))
+    
+    async def main(self):
+        self.tasks = []
+        connect_loop_task = asyncio.create_task(self.connect_loop_tasks())
+        processing_loop_task = asyncio.create_task(self.processing_loop_tasks())
+        self.tasks.append(connect_loop_task)
+        self.tasks.append(processing_loop_task)
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+
+    async def connect_loop_tasks(self):
+        while True:
+            await asyncio.sleep(1)
+            await self.connect_loop()
+
+    async def connect_loop(self):
+        if not self.connected:
+            try:
+                await asyncio.wait_for(self.connect(), timeout=self.connection_timeout)
+            except asyncio.TimeoutError:
+                self.conn = None
+
+    async def processing_loop_tasks(self):
+        while True:
+            await asyncio.sleep(2) # TODO: assess this timeout
+            await self.processing_loop()
+        
     async def connect(self):
         sslctx = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
         self.conn = await websockets.connect(self.server, ssl=sslctx)
@@ -50,7 +92,6 @@ class MavWebRTC(object):
     def on_negotiation_needed(self, element):
         promise = Gst.Promise.new_with_change_func(self.on_offer_created, element, None)
         element.emit('create-offer', None, promise)
-
 
     def send_ice_candidate_message(self, _, mlineindex, candidate):
         icemsg = json.dumps({'ice': {'candidate': candidate, 'sdpMLineIndex': mlineindex}})
@@ -145,18 +186,20 @@ class MavWebRTC(object):
             sdpmlineindex = ice['sdpMLineIndex']
             self.webrtc.emit('add-ice-candidate', sdpmlineindex, candidate)
 
-    async def loop(self):
-        assert self.conn
-        async for message in self.conn:
-            if message == 'HELLO':
-                self.logger.handle.info("Received registration response from signalling server: {}".format(message))
-                self.start_pipeline()
-                #await self.setup_call()
-            elif message == 'SESSION_OK':
-                self.start_pipeline()
-            elif message.startswith('ERROR'):
-                print (message)
-                return 1
-            else:
-                await self.handle_sdp(message)
-        return 0
+    async def processing_loop(self):
+        if self.connected:
+            async for message in self.conn:
+                if message == 'HELLO':
+                    self.logger.handle.info("Received registration response from signalling server: {}".format(message))
+                    self.start_pipeline()
+                    #await self.setup_call()
+                elif message == 'SESSION_OK':
+                    self.start_pipeline()
+                elif message.startswith('ERROR'):
+                    print (message)
+                    return 1
+                else:
+                    await self.handle_sdp(message)
+            return 0
+        else:
+            return 1
