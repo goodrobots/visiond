@@ -8,6 +8,7 @@ import sys
 
 from .rtsp import *
 from .webrtc import *
+from .webrtc_signalserver import *
 
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
@@ -403,6 +404,8 @@ class Streamer(object):
         self.logger.handle.info("RTSP stream running at rtsp://"+str(dest)+":"+str(port)+"/video")
 
     def output_webrtc(self):
+        self.logger.handle.info("Creating WebRTC Signal Server")
+        self.webrtc_signal_server = MavWebRTCSignalServer(self.logger, self.config)
         self.logger.handle.info("Attaching output 'webrtc'")
         sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
         self.pipeline.add(sink)
