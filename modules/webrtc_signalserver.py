@@ -285,16 +285,3 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         self.loop.run_until_complete(wsd)
         # VVV this is in the example but is it required? no idea how websockets.serve() works...
         self.loop.run_forever()
-
-if __name__ == "__main__":
-    print("Error: webrtc_singalserver should only be run as a module")
-    """
-    import time
-    root = logging.getLogger('Visiond')
-    root.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    test_signal_server = MavWebRTCSignalServer(root, None)
-    while True:
-        time.sleep(1)
-        print("in the other loop")
-    """
