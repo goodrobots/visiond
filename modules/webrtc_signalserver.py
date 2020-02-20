@@ -322,7 +322,6 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         # Send back a HELLO
         await ws.send('HELLO')
         return uid
-
     async def handler(self, ws, path):
         '''
         All incoming messages are handled here. @path is unused.

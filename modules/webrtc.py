@@ -29,7 +29,7 @@ class MavWebRTC(threading.Thread):
     
     @property
     def connected(self):
-        if self.con:
+        if self.conn:
             return True
         return False
 
@@ -56,8 +56,11 @@ class MavWebRTC(threading.Thread):
     async def connect_loop(self):
         if not self.connected:
             try:
+                self.logger.info("Starting peer connection with signalling server")
                 await asyncio.wait_for(self.connect(), timeout=self.connection_timeout)
-            except asyncio.TimeoutError:
+            #except asyncio.TimeoutError:
+            except Exception as e:
+                self.logger.warning("connect_loop error: {}".format(repr(e)))
                 self.conn = None
 
     async def processing_loop_tasks(self):
@@ -76,7 +79,7 @@ class MavWebRTC(threading.Thread):
 
     def send_sdp_offer(self, offer):
         text = offer.sdp.as_text()
-        print ('Sending offer:\n%s' % text)
+        self.logger.info('Sending offer:\n%s' % text)
         msg = json.dumps({'sdp': {'type': 'offer', 'sdp': text}})
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self.conn.send(msg))
@@ -101,7 +104,7 @@ class MavWebRTC(threading.Thread):
 
     def on_incoming_decodebin_stream(self, _, pad):
         if not pad.has_current_caps():
-            print (pad, 'has no caps, ignoring')
+            self.logger.info(pad, 'has no caps, ignoring')
             return
 
         caps = pad.get_current_caps()
@@ -174,7 +177,7 @@ class MavWebRTC(threading.Thread):
             sdp = msg['sdp']
             assert(sdp['type'] == 'answer')
             sdp = sdp['sdp']
-            print ('Received answer:\n%s' % sdp)
+            self.logger.info('Received answer:\n%s' % sdp)
             res, sdpmsg = GstSdp.SDPMessage.new()
             GstSdp.sdp_message_parse_buffer(bytes(sdp.encode()), sdpmsg)
             answer = GstWebRTC.WebRTCSessionDescription.new(GstWebRTC.WebRTCSDPType.ANSWER, sdpmsg)
@@ -190,14 +193,19 @@ class MavWebRTC(threading.Thread):
     async def processing_loop(self):
         if self.connected:
             async for message in self.conn:
+                self.logger.debug("Message: {}".format(message))
                 if message == 'HELLO':
                     self.logger.info("Received registration response from signalling server: {}".format(message))
-                    self.start_pipeline()
+                    #self.start_pipeline()
                     #await self.setup_call()
                 elif message == 'SESSION_OK':
-                    self.start_pipeline()
+                    self.logger.info("Received SESSION_OK, starting pipeline");
+                    # self.start_pipeline()
+                elif message == 'SEND_SDP':
+                    self.logger.info('Received SEND_SDP, starting pipeline');
+                    self.start_pipeline();
                 elif message.startswith('ERROR'):
-                    print (message)
+                    self.logger.warning(message)
                     return 1
                 else:
                     await self.handle_sdp(message)
