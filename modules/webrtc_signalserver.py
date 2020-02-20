@@ -10,15 +10,14 @@
 import os
 import sys
 import ssl
+import time
 import logging
 import asyncio
 import websockets
 import http
 import multiprocessing
 
-from concurrent.futures._base import TimeoutError
 
-KEEPALIVE_TIMEOUT = 30 #config.keepalive_timeout
 
 ############### Global data ###############
 
@@ -40,24 +39,70 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         self.daemon = True
         self.config = config
         self.logger = logging.getLogger('visiond.' + __name__)
+        self._should_shutdown = multiprocessing.Event()
+        self.signal_server = None
 
         # Attempt to redirect the default handler into our log files
         default_server_logger = logging.getLogger('websockets.server')
-        default_server_logger.setLevel(logging.DEBUG) # TODO: Set based on options 
-        for handler in self.logger.handlers:
+        default_server_logger.setLevel(logging.DEBUG) # TODO: Set based on options
+        default_server_logger.propagate = True
+        for handler in logging.getLogger('visiond').handlers:
             default_server_logger.addHandler(handler)
 
         self.disable_ssl = False  # TODO: pass these in as options
         self.ADDR_PORT = ("0.0.0.0", 8443) # TODO: pass these in as options
         self.certpath = os.path.dirname(__file__) # TODO: pass these in as options
         self.health_check_path = "/health" # TODO: pass these in as options
-
+        self.keepalive_timeout = 30 # TODO: pass these in as options
         self.start() # the server will self start
+    
+    def shutdown(self):
+        self.logger.info("shutdown was called")
+        self._should_shutdown.set()
 
+    def custom_exception_handler(self, loop, context):
+        # first, handle with default handler
+        # self.loop.default_exception_handler(context)
+        # context["message"] will always be there; but context["exception"] may not
+        exception = context.get('exception',  context["message"])
+        self.logger.error(f"An exception occurred in the webrtc signal server: {exception}")
+        self.logger.critical("Stopping the event loop")
+        self.loop.stop() # this will force self.loop.run_forever() to exit
+        
     def run(self):
-        # called by start()
+        self.logger.info("Webrtc signal server starting...")
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
+        self.loop.set_exception_handler(self.custom_exception_handler)
+        self.loop.run_until_complete(self.main())
+        self.loop.close()
+        self.logger.info("Webrtc signal server exited")
+
+    async def main(self):
+        self.tasks = []
+        server_monitor_loop_task = asyncio.create_task(self.server_monitor_task())
+        websocket_server_start_loop_task = asyncio.create_task(self.server_starter_task())
+        self.tasks.append(server_monitor_loop_task)
+        self.tasks.append(websocket_server_start_loop_task)
+        await asyncio.gather(*self.tasks, return_exceptions=False)
+
+    async def server_monitor_task(self):
+        while not self._should_shutdown.is_set():
+            await asyncio.sleep(1)
+        # if we get here shutdown() has been called
+        self.logger.info("Stopping the event loop")
+        if self.signal_server:
+            self.signal_server.close()
+            await self.signal_server.wait_closed()
+        # self.loop.stop()
+    
+    async def server_starter_task(self):
+        while not self.signal_server:
+            self.signal_server = await self.start_signal_server()
+            await asyncio.sleep(3)
+
+    async def start_signal_server(self):
+        # called in the loop of run()
         sslctx = None
 
         if not self.disable_ssl:
@@ -75,23 +120,24 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                 sslctx.load_cert_chain(chain_pem, keyfile=key_pem)
             except FileNotFoundError:
                 self.logger.critical("Certificates not found, did you run generate_cert.sh?")
-                sys.exit(1)
+                # we can't run the signal server without ssl, so bail out here
+                self.logger.critical("Server startup aborted, SSL is required")
+                return False
             # FIXME
             sslctx.check_hostname = False
             sslctx.verify_mode = ssl.CERT_NONE
 
         self.logger.info("Listening on https://{}:{}".format(*self.ADDR_PORT))
-        # Websocket server
+        
+            # Websocket server
         start_server = websockets.serve(self.handler, *self.ADDR_PORT, ssl=sslctx, process_request=self.health_check,
                        # Maximum number of messages that websockets will pop
                        # off the asyncio and OS buffers per connection. See:
                        # https://websockets.readthedocs.io/en/stable/api.html#websockets.protocol.WebSocketCommonProtocol
                        max_queue=16)
-        self.loop.run_until_complete(start_server)
-        self.loop.run_forever()
-
-    ############### Helper functions ###############
-
+        server = await start_server
+        return server
+    
     async def health_check(self, path, request_headers):
         if path == self.health_check_path:
             return http.HTTPStatus.OK, [], b"OK\n"
@@ -104,8 +150,8 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         msg = None
         while msg is None:
             try:
-                msg = await asyncio.wait_for(ws.recv(), KEEPALIVE_TIMEOUT)
-            except TimeoutError:
+                msg = await asyncio.wait_for(ws.recv(), self.keepalive_timeout)
+            except asyncio.TimeoutError:
                 self.logger.debug('Sending keepalive ping to {!r} in recv'.format(raddr))
                 await ws.ping()
         return msg
