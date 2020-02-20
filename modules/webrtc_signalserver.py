@@ -90,7 +90,8 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         # self.loop.stop()
     
     async def server_starter_task(self):
-        while not self.signal_server:
+        while ((not self.signal_server) and (not self._should_shutdown.is_set())):
+            # attempt to start the signal server
             self.signal_server = await self.start_signal_server()
             await asyncio.sleep(3)
 
