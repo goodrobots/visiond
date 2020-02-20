@@ -62,21 +62,11 @@ class MavWebRTCSignalServer(multiprocessing.Process):
     def shutdown(self):
         self.logger.info("shutdown was called")
         self._should_shutdown.set()
-
-    def custom_exception_handler(self, loop, context):
-        # first, handle with default handler
-        # self.loop.default_exception_handler(context)
-        # context["message"] will always be there; but context["exception"] may not
-        exception = context.get('exception',  context["message"])
-        self.logger.error(f"An exception occurred in the webrtc signal server: {exception}")
-        self.logger.critical("Stopping the event loop")
-        self.loop.stop() # this will force self.loop.run_forever() to exit
         
     def run(self):
         self.logger.info("Webrtc signal server starting...")
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.loop.set_exception_handler(self.custom_exception_handler)
         self.loop.run_until_complete(self.main())
         self.loop.close()
         self.logger.info("Webrtc signal server exited")
@@ -155,7 +145,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
             try:
                 msg = await asyncio.wait_for(ws.recv(), self.keepalive_timeout)
             except asyncio.TimeoutError:
-                self.logger.debug('Sending keepalive ping to {!r} in recv'.format(raddr))
+                # self.logger.debug('Sending keepalive ping to {!r} in recv'.format(raddr))
                 await ws.ping()
         return msg
 
@@ -176,14 +166,14 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         if uid in self.sessions:
             other_id = self.sessions[uid]
             del self.sessions[uid]
-            self.logger.debug("Cleaned up {} session".format(uid))
+            self.logger.info("Cleaned up {} session".format(uid))
             if other_id in self.sessions:
                 del self.sessions[other_id]
-                self.logger.debug("Also cleaned up {} session".format(other_id))
+                self.logger.info("Also cleaned up {} session".format(other_id))
                 # If there was a session with this peer, also
                 # close the connection to reset its state.
                 if other_id in self.peers:
-                    self.logger.debug("Closing connection to {}".format(other_id))
+                    self.logger.info("Closing connection to {}".format(other_id))
                     wso, oaddr, _ = self.peers[other_id]
                     del self.peers[other_id]
                     await wso.close()
@@ -207,7 +197,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                 await self.cleanup_room(uid, status)
             del self.peers[uid]
             await ws.close()
-            self.logger.debug("Disconnected from peer {!r} at {!r}".format(uid, raddr))
+            self.logger.info("Disconnected from peer {!r} at {!r}".format(uid, raddr))
 
     ############### Handler functions ###############
 
@@ -215,7 +205,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         raddr = ws.remote_address
         peer_status = None
         self.peers[uid] = [ws, raddr, peer_status]
-        self.logger.debug("Registered peer {!r} at {!r}".format(uid, raddr))
+        self.logger.info("Registered peer {!r} at {!r}".format(uid, raddr))
         while True:
             # Receive command, wait forever if necessary
             msg = await self.recv_msg_ping(ws, raddr)
@@ -260,7 +250,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                     raise AssertionError('Unknown peer status {!r}'.format(peer_status))
             # Requested a session with a specific peer
             elif msg.startswith('SESSION'):
-                self.logger.debug("{!r} command {!r}".format(uid, msg))
+                self.logger.info("{!r} command {!r}".format(uid, msg))
                 _, callee_id = msg.split(maxsplit=1)
                 if callee_id not in self.peers:
                     await ws.send('ERROR peer {!r} not found'.format(callee_id))
@@ -270,7 +260,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                     continue
                 await ws.send('SESSION_OK')
                 wsc = self.peers[callee_id][0]
-                self.logger.debug('Session from {!r} ({!r}) to {!r} ({!r})'
+                self.logger.info('Session from {!r} ({!r}) to {!r} ({!r})'
                     ''.format(uid, raddr, callee_id, wsc.remote_address))
                 # Register session
                 self.peers[uid][2] = peer_status = 'session'
@@ -279,7 +269,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                 self.sessions[callee_id] = uid
             # Requested joining or creation of a room
             elif msg.startswith('ROOM'):
-                self.logger.debug('{!r} command {!r}'.format(uid, msg))
+                self.logger.info('{!r} command {!r}'.format(uid, msg))
                 _, room_id = msg.split(maxsplit=1)
                 # Room name cannot be 'session', empty, or contain whitespace
                 if room_id == 'session' or room_id.split() != [room_id]:
@@ -305,7 +295,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                     self.logger.debug('room {}: {} -> {}: {}'.format(room_id, uid, pid, msg))
                     await wsp.send(msg)
             else:
-                self.logger.debug('Ignoring unknown message {!r} from {!r}'.format(msg, uid))
+                self.logger.info('Ignoring unknown message {!r} from {!r}'.format(msg, uid))
 
     async def hello_peer(self, ws):
         '''
@@ -323,16 +313,17 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         # Send back a HELLO
         await ws.send('HELLO')
         return uid
+
     async def handler(self, ws, path):
         '''
         All incoming messages are handled here. @path is unused.
         '''
         raddr = ws.remote_address
-        self.logger.debug("Connected to {!r}".format(raddr))
+        self.logger.info("Connected to {!r}".format(raddr))
         peer_id = await self.hello_peer(ws)
         try:
             await self.connection_handler(ws, peer_id)
         except websockets.ConnectionClosed:
-            self.logger.debug("Connection to peer {!r} closed, exiting handler".format(raddr))
+            self.logger.info("Connection to peer {!r} closed, exiting handler".format(raddr))
         finally:
             await self.remove_peer(peer_id)
