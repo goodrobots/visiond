@@ -20,6 +20,7 @@ class MavWebRTC(threading.Thread):
         self.pipeline = pipeline
         self.logger = logging.getLogger('visiond.' + __name__)
         self.config = config
+        self._should_shutdown = threading.Event()
         self.conn = None
         self.peer_id = None
         self.our_id = our_id
@@ -34,11 +35,15 @@ class MavWebRTC(threading.Thread):
         return False
 
     def run(self):
+        self.logger.info("Webrtc stream is starting...")
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        res = self.loop.run_until_complete(self.main())
+        self.loop.run_until_complete(self.main())
         self.loop.close()
-        self.logger.debug("WebRTC res return: {}".format(res))
+        self.logger.info("Webrtc stream has exited")
+
+    def shutdown(self):
+        self._should_shutdown.set()
     
     async def main(self):
         self.tasks = []
@@ -49,7 +54,7 @@ class MavWebRTC(threading.Thread):
         await asyncio.gather(*self.tasks, return_exceptions=True)
 
     async def connect_loop_tasks(self):
-        while True:
+        while not self._should_shutdown.is_set():
             await asyncio.sleep(1)
             await self.connect_loop()
 
@@ -64,7 +69,7 @@ class MavWebRTC(threading.Thread):
                 self.conn = None
 
     async def processing_loop_tasks(self):
-        while True:
+        while not self._should_shutdown.is_set():
             await asyncio.sleep(2) # TODO: assess this timeout
             await self.processing_loop()
         
@@ -191,7 +196,9 @@ class MavWebRTC(threading.Thread):
             self.webrtc.emit('add-ice-candidate', sdpmlineindex, candidate)
 
     async def processing_loop(self):
-        if self.connected:
+        if self.connected and not self._should_shutdown.is_set():
+            # TODO: add a timeout to self.conn here so we don't await forever
+            # https://stackoverflow.com/questions/50241696/how-to-iterate-over-an-asynchronous-iterator-with-a-timeout
             async for message in self.conn:
                 self.logger.debug("Message: {}".format(message))
                 if message == 'HELLO':
@@ -199,11 +206,11 @@ class MavWebRTC(threading.Thread):
                     #self.start_pipeline()
                     #await self.setup_call()
                 elif message == 'SESSION_OK':
-                    self.logger.info("Received SESSION_OK, starting pipeline");
+                    self.logger.info("Received SESSION_OK, starting pipeline")
                     # self.start_pipeline()
                 elif message == 'SEND_SDP':
-                    self.logger.info('Received SEND_SDP, starting pipeline');
-                    self.start_pipeline();
+                    self.logger.info('Received SEND_SDP, starting pipeline')
+                    self.start_pipeline()
                 elif message.startswith('ERROR'):
                     self.logger.warning(message)
                     return 1
