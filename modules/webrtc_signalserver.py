@@ -17,21 +17,21 @@ import websockets
 import http
 import multiprocessing
 
+############### data info ###############
 
-
-############### Global data ###############
-
+# self.peers
 # Format: {uid: (Peer WebSocketServerProtocol,
 #                remote_address,
 #                <'session'|room_id|None>)}
-peers = dict()
+
+# self.sessions
 # Format: {caller_uid: callee_uid,
 #          callee_uid: caller_uid}
 # Bidirectional mapping between the two peers
-sessions = dict()
+
+# self.rooms
 # Format: {room_id: {peer1_id, peer2_id, peer3_id, ...}}
 # Room dict with a set of peers in each room
-rooms = dict()
 
 class MavWebRTCSignalServer(multiprocessing.Process):
     def __init__(self, config):
@@ -41,6 +41,9 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         self.logger = logging.getLogger('visiond.' + __name__)
         self._should_shutdown = multiprocessing.Event()
         self.signal_server = None
+        self.peers = dict()
+        self.sessions = dict()
+        self.rooms = dict()
 
         # Attempt to redirect the default handler into our log files
         default_server_logger = logging.getLogger('websockets.server')
@@ -162,70 +165,68 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         This informs the peer that the session and all calls have ended, and it
         must reconnect.
         '''
-        global sessions
-        if peer_id in sessions:
-            del sessions[peer_id]
+        if peer_id in self.sessions:
+            del self.sessions[peer_id]
         # Close connection
         if ws and ws.open:
             # Don't care about errors
             asyncio.ensure_future(ws.close(reason='hangup'))
 
     async def cleanup_session(self, uid):
-        if uid in sessions:
-            other_id = sessions[uid]
-            del sessions[uid]
+        if uid in self.sessions:
+            other_id = self.sessions[uid]
+            del self.sessions[uid]
             self.logger.debug("Cleaned up {} session".format(uid))
-            if other_id in sessions:
-                del sessions[other_id]
+            if other_id in self.sessions:
+                del self.sessions[other_id]
                 self.logger.debug("Also cleaned up {} session".format(other_id))
                 # If there was a session with this peer, also
                 # close the connection to reset its state.
-                if other_id in peers:
+                if other_id in self.peers:
                     self.logger.debug("Closing connection to {}".format(other_id))
-                    wso, oaddr, _ = peers[other_id]
-                    del peers[other_id]
+                    wso, oaddr, _ = self.peers[other_id]
+                    del self.peers[other_id]
                     await wso.close()
 
     async def cleanup_room(self, uid, room_id):
-        room_peers = rooms[room_id]
+        room_peers = self.rooms[room_id]
         if uid not in room_peers:
             return
         room_peers.remove(uid)
         for pid in room_peers:
-            wsp, paddr, _ = peers[pid]
+            wsp, paddr, _ = self.peers[pid]
             msg = 'ROOM_PEER_LEFT {}'.format(uid)
             self.logger.debug('room {}: {} -> {}: {}'.format(room_id, uid, pid, msg))
             await wsp.send(msg)
 
     async def remove_peer(self, uid):
         await cleanup_session(uid)
-        if uid in peers:
-            ws, raddr, status = peers[uid]
+        if uid in self.peers:
+            ws, raddr, status = self.peers[uid]
             if status and status != 'session':
                 await self.cleanup_room(uid, status)
-            del peers[uid]
+            del self.peers[uid]
             await ws.close()
             self.logger.debug("Disconnected from peer {!r} at {!r}".format(uid, raddr))
 
     ############### Handler functions ###############
 
     async def connection_handler(self, ws, uid):
-        global peers, sessions, rooms
         raddr = ws.remote_address
         peer_status = None
-        peers[uid] = [ws, raddr, peer_status]
+        self.peers[uid] = [ws, raddr, peer_status]
         self.logger.debug("Registered peer {!r} at {!r}".format(uid, raddr))
         while True:
             # Receive command, wait forever if necessary
             msg = await self.recv_msg_ping(ws, raddr)
             # Update current status
-            peer_status = peers[uid][2]
+            peer_status = self.peers[uid][2]
             # We are in a session or a room, messages must be relayed
             if peer_status is not None:
                 # We're in a session, route message to connected peer
                 if peer_status == 'session':
-                    other_id = sessions[uid]
-                    wso, oaddr, status = peers[other_id]
+                    other_id = self.sessions[uid]
+                    wso, oaddr, status = self.peers[other_id]
                     assert(status == 'session')
                     self.logger.debug("{} -> {}: {}".format(uid, other_id, msg))
                     await wso.send(msg)
@@ -234,11 +235,11 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                     # ROOM_PEER_MSG peer_id MSG
                     if msg.startswith('ROOM_PEER_MSG'):
                         _, other_id, msg = msg.split(maxsplit=2)
-                        if other_id not in peers:
+                        if other_id not in self.peers:
                             await ws.send('ERROR peer {!r} not found'
                                         ''.format(other_id))
                             continue
-                        wso, oaddr, status = peers[other_id]
+                        wso, oaddr, status = self.peers[other_id]
                         if status != room_id:
                             await ws.send('ERROR peer {!r} is not in the room'
                                         ''.format(other_id))
@@ -247,8 +248,8 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                         self.logger.debug('room {}: {} -> {}: {}'.format(room_id, uid, other_id, msg))
                         await wso.send(msg)
                     elif msg == 'ROOM_PEER_LIST':
-                        room_id = peers[peer_id][2]
-                        room_peers = ' '.join([pid for pid in rooms[room_id] if pid != peer_id])
+                        room_id = self.peers[peer_id][2]
+                        room_peers = ' '.join([pid for pid in self.rooms[room_id] if pid != peer_id])
                         msg = 'ROOM_PEER_LIST {}'.format(room_peers)
                         self.logger.debug('room {}: -> {}: {}'.format(room_id, uid, msg))
                         await ws.send(msg)
@@ -261,21 +262,21 @@ class MavWebRTCSignalServer(multiprocessing.Process):
             elif msg.startswith('SESSION'):
                 self.logger.debug("{!r} command {!r}".format(uid, msg))
                 _, callee_id = msg.split(maxsplit=1)
-                if callee_id not in peers:
+                if callee_id not in self.peers:
                     await ws.send('ERROR peer {!r} not found'.format(callee_id))
                     continue
                 if peer_status is not None:
                     await ws.send('ERROR peer {!r} busy'.format(callee_id))
                     continue
                 await ws.send('SESSION_OK')
-                wsc = peers[callee_id][0]
+                wsc = self.peers[callee_id][0]
                 self.logger.debug('Session from {!r} ({!r}) to {!r} ({!r})'
                     ''.format(uid, raddr, callee_id, wsc.remote_address))
                 # Register session
-                peers[uid][2] = peer_status = 'session'
-                sessions[uid] = callee_id
-                peers[callee_id][2] = 'session'
-                sessions[callee_id] = uid
+                self.peers[uid][2] = peer_status = 'session'
+                self.sessions[uid] = callee_id
+                self.peers[callee_id][2] = 'session'
+                self.sessions[callee_id] = uid
             # Requested joining or creation of a room
             elif msg.startswith('ROOM'):
                 self.logger.debug('{!r} command {!r}'.format(uid, msg))
@@ -284,22 +285,22 @@ class MavWebRTCSignalServer(multiprocessing.Process):
                 if room_id == 'session' or room_id.split() != [room_id]:
                     await ws.send('ERROR invalid room id {!r}'.format(room_id))
                     continue
-                if room_id in rooms:
-                    if uid in rooms[room_id]:
+                if room_id in self.rooms:
+                    if uid in self.rooms[room_id]:
                         raise AssertionError('How did we accept a ROOM command '
                                             'despite already being in a room?')
                 else:
                     # Create room if required
-                    rooms[room_id] = set()
-                room_peers = ' '.join([pid for pid in rooms[room_id]])
+                    self.rooms[room_id] = set()
+                room_peers = ' '.join([pid for pid in self.rooms[room_id]])
                 await ws.send('ROOM_OK {}'.format(room_peers))
                 # Enter room
-                peers[uid][2] = peer_status = room_id
-                rooms[room_id].add(uid)
-                for pid in rooms[room_id]:
+                self.peers[uid][2] = peer_status = room_id
+                self.rooms[room_id].add(uid)
+                for pid in self.rooms[room_id]:
                     if pid == uid:
                         continue
-                    wsp, paddr, _ = peers[pid]
+                    wsp, paddr, _ = self.peers[pid]
                     msg = 'ROOM_PEER_JOINED {}'.format(uid)
                     self.logger.debug('room {}: {} -> {}: {}'.format(room_id, uid, pid, msg))
                     await wsp.send(msg)
@@ -316,7 +317,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
         if hello != 'HELLO':
             await ws.close(code=1002, reason='invalid protocol')
             raise Exception("Invalid hello from {!r}".format(raddr))
-        if not uid or uid in peers or uid.split() != [uid]: # no whitespace
+        if not uid or uid in self.peers or uid.split() != [uid]: # no whitespace
             await ws.close(code=1002, reason='invalid peer uid')
             raise Exception("Invalid uid {!r} from {!r}".format(uid, raddr))
         # Send back a HELLO
