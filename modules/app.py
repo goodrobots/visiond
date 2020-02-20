@@ -7,7 +7,8 @@ import os
 import re
 import time
 import v4l2
-import logging
+import signal
+import sys
 from fcntl import ioctl
 
 from .config import *
@@ -22,6 +23,14 @@ class visiondApp():
     def __init__(self, config):
         self.config = config
         self.logger = logging.getLogger('visiond.' + __name__)
+        self.stream = None
+        self._should_shutdown = False
+
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+    def signal_handler(self, sig, frame):
+        self.shutdown()
 
     def run(self):
         self.logger.info("Starting maverick-visiond")
@@ -102,7 +111,7 @@ class visiondApp():
             ioctl(dp, v4l2.VIDIOC_QUERYCAP, cp)
             if cp.card == "s5p-mfc-enc":
                 self.mfcdev = dp
-                self.logger.info('MFC Hardware encoder detected, autoselecting '+devicepath)
+                self.logger.info(f'MFC Hardware encoder detected, autoselecting {devicepath}')
 
         # If format set in config use it, otherwise autodetect
         streamtype = None
@@ -154,12 +163,12 @@ class visiondApp():
         # Create the stream
         try:
             self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
-            Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
+            self.stream = Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
         except Exception as e:
             #self.logger.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
 
-        while True:
+        while not self._should_shutdown:
             time.sleep(5)
 
     def camera_info(self):
@@ -245,3 +254,14 @@ class visiondApp():
         except:
             pass
         return available
+
+    def shutdown(self):
+        self._should_shutdown = True
+        if self.stream:
+            # TODO: handle these in the stream itself?
+            #  e.g. call self.stream.shutdown() ?
+            if self.stream.webrtc:
+                self.stream.webrtc.shutdown()
+            if self.stream.webrtc_signal_server:
+                self.stream.webrtc_signal_server.shutdown()
+                self.stream.webrtc_signal_server.join()
