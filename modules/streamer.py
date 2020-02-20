@@ -30,6 +30,8 @@ class Streamer(object):
         self.framerate = framerate
         self.output = output
         self.config = config
+        self.webrtc = None
+        self.webrtc_signal_server = None
         self.logger = logging.getLogger('visiond.' + __name__)
 
         # Start with creating a pipeline from source element
