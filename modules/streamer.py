@@ -411,9 +411,8 @@ class Streamer(object):
         sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
-        self.our_webrtcid = random.randrange(10, 10000)
+        #self.our_webrtcid = random.randrange(10, 10000)
         self.our_webrtcid = 12345
-        
         self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.config)
         self.webrtc.start()
 
