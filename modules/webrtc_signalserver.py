@@ -54,7 +54,6 @@ class MavWebRTCSignalServer(multiprocessing.Process):
 
         self.disable_ssl = False  # TODO: pass these in as options
         self.ADDR_PORT = ("0.0.0.0", 8443) # TODO: pass these in as options
-        self.certpath = os.path.dirname(__file__) # TODO: pass these in as options
         self.health_check_path = "/health" # TODO: pass these in as options
         self.keepalive_timeout = 30 # TODO: pass these in as options
         self.start() # the server will self start
@@ -101,22 +100,24 @@ class MavWebRTCSignalServer(multiprocessing.Process):
 
         if not self.disable_ssl:
             # Create an SSL context to be used by the websocket server
-            self.logger.info('Using TLS with keys in {!r}'.format(self.certpath))
-            if 'letsencrypt' in self.certpath:
-                chain_pem = os.path.join(self.certpath, 'fullchain.pem')
-                key_pem = os.path.join(self.certpath, 'privkey.pem')
+            if 'ssl_keyfile' in self.config.args:
+                self.ssl_keyfile = self.config.args.ssl_keyfile
             else:
-                chain_pem = os.path.join(self.certpath, 'cert.pem')
-                key_pem = os.path.join(self.certpath, 'key.pem')
-
+                self.ssl_keyfile = os.path.join(os.path.dirname(__file__), 'key.pem')
+            if 'ssl_certfile' in self.config.args:
+                self.ssl_certfile = self.config.args.ssl_certfile
+            else:
+                self.ssl_certfile = os.path.join(os.path.dirname(__file__), 'cert.pem')
             sslctx = ssl.create_default_context()
+            self.logger.info("Using ssl keyfile: {}, certfile: {}".format(self.ssl_keyfile, self.ssl_certfile))
             try:
-                sslctx.load_cert_chain(chain_pem, keyfile=key_pem)
-            except FileNotFoundError:
-                self.logger.critical("Certificates not found, did you run generate_cert.sh?")
+                #sslctx.load_verify_locations(cafile="/srv/maverick/data/security/ssl/ca/mavCA.pem")
+                sslctx.load_cert_chain(self.ssl_certfile, keyfile=self.ssl_keyfile)
+            except Exception as e:
+                self.logger.critical("Error loading certificates: {}".format(repr(e)))
                 # we can't run the signal server without ssl, so bail out here
                 self.logger.critical("Server startup aborted, SSL is required")
-                return False
+                sys.exit(1)
             # FIXME
             sslctx.check_hostname = False
             sslctx.verify_mode = ssl.CERT_NONE
