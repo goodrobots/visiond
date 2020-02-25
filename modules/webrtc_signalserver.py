@@ -192,7 +192,7 @@ class MavWebRTCSignalServer(multiprocessing.Process):
             await wsp.send(msg)
 
     async def remove_peer(self, uid):
-        await cleanup_session(uid)
+        await self.cleanup_session(uid)
         if uid in self.peers:
             ws, raddr, status = self.peers[uid]
             if status and status != 'session':
