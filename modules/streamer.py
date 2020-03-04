@@ -1,10 +1,9 @@
-import asyncio
 import gi
 import logging
 import os
-import random
 import signal
 import subprocess
+import threading
 import sys
 
 from .rtsp import *
@@ -32,6 +31,8 @@ class Streamer(object):
         self.config = config
         self.webrtc = None
         self.webrtc_signal_server = None
+        self.glib_mainloop = None
+        self.glib_thread = None
         self.logger = logging.getLogger('visiond.' + __name__)
 
         # Start with creating a pipeline from source element
@@ -413,7 +414,6 @@ class Streamer(object):
         sink = Gst.ElementFactory.make("webrtcbin", "webrtc")
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
-        #self.our_webrtcid = random.randrange(10, 10000)
         self.our_webrtcid = 12345
         self.webrtc = MavWebRTC(self.pipeline, self.our_webrtcid, self.config)
         self.webrtc.start()
@@ -437,20 +437,32 @@ class Streamer(object):
 
     ### Action methods
     def start(self):
-        if self.output != "rtsp" and self.output != "webrtc":
+        # TODO: check to make sure we are not already playing...
+        if self.output not in ["rtsp", "webrtc"]:
             self.pipeline.set_state(Gst.State.PLAYING)
             self.playing = True
         self.logger.info('Starting camera stream')
-        GLib.MainLoop().run()
+        self.glib_mainloop = GLib.MainLoop()
+        # self.glib_mainloop.run() is a blocking call
+        #  Wrap the call in a thread:
+        self.glib_thread = threading.Thread(target=self.glib_mainloop.run, daemon=True)
+        self.glib_thread.start()
+
+        # or let it block here...
+        # self.glib_mainloop.run()
 
     def write(self,s):
         gstbuff = Gst.Buffer.new_wrapped(s)
         self.source.emit("push-buffer",gstbuff)
 
     def stop(self):
-        self.pipeline.set_state(Gst.State.READY)
-        self.playing = False
         self.logger.info('Stopping camera stream')
+        if self.glib_thread and self.glib_thread.is_alive() and self.glib_mainloop.is_running():
+        # if self.glib_mainloop.is_running():    
+            self.glib_mainloop.quit()
+            self.glib_thread.join() # wait for the thread to finish
+        self.playing = False
+        self.pipeline.set_state(Gst.State.READY)
 
     def flush(self):
         self.stop()

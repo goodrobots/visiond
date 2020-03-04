@@ -42,10 +42,10 @@ class visiondApp():
         if 'retry' not in self.config.args or not self.config.args.retry:
             self.retry = 30
         else:
-            self.retry = self.config.args.retry
+            self.retry = float(self.config.args.retry)
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
-        while True:
+        while not self._should_shutdown:
             try:
                 if 'pipeline_override' in self.config.args:
                     self.logger.info("pipeline_override set, constructing manual pipeline")
@@ -55,7 +55,7 @@ class visiondApp():
                     self.autoconstruct()
             except ValueError as e:
                 self.logger.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
-                time.sleep(float(self.retry))
+                time.sleep(self.retry)
 
     def manualconstruct(self):
         if self.config.args.pipeline_override not in self.config.args:
@@ -160,7 +160,7 @@ class visiondApp():
                 pixelformat = self.config.args.pixelformat
         self.logger.debug("Using pixelformat: {}".format(pixelformat))
 
-        # Create the stream
+        # Create and start the stream
         try:
             self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
             self.stream = Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
@@ -169,7 +169,7 @@ class visiondApp():
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
 
         while not self._should_shutdown:
-            time.sleep(5)
+            time.sleep(1)
 
     def camera_info(self):
         # Log capability info
@@ -257,11 +257,11 @@ class visiondApp():
 
     def shutdown(self):
         self._should_shutdown = True
+        self.logger.info("Shutting down visiond")
         if self.stream:
-            # TODO: handle these in the stream itself?
-            #  e.g. call self.stream.shutdown() ?
             if self.stream.webrtc:
                 self.stream.webrtc.shutdown()
             if self.stream.webrtc_signal_server:
                 self.stream.webrtc_signal_server.shutdown()
                 self.stream.webrtc_signal_server.join()
+            self.stream.stop()
