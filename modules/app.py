@@ -93,7 +93,6 @@ class visiondApp():
 
         # Check the camera has a valid input
         try:
-            #self.vd = open(cameradev, 'r+')
             self.vd = io.TextIOWrapper(open(cameradev, "r+b", buffering=0))
             cp = v4l2.v4l2_capability()
         except Exception as e:
@@ -104,6 +103,15 @@ class visiondApp():
         # Log info
         self.camera_info()
         
+        # Try and autodetect Jetson/Tegra CSI connection
+        if self.driver == 'tegra-video' and ('input' not in self.config.args or not self.config.args.input):
+            self.logger.handle.info('Nvidia Jetson/Tegra CSI connection detected, switching to nvarguscamerasrc')
+            self.input = "nvarguscamerasrc"
+        elif 'input' not in self.config.args or not self.config.args.input:
+            self.input = "v4l2src"
+        else:
+            self.input = self.config.args.input
+
         # Try and autodetect MFC device
         self.mfcdev = None
         for devicepath in devicepaths:
@@ -119,8 +127,11 @@ class visiondApp():
             if self.config.args.format:
                 streamtype = self.config.args.format
         except:
-            if re.search("C920", self.card.decode()):
-                self.logger.info("Logitech C920 detected, forcing H264 passthrough")
+            if self.input == "nvarguscamerasrc":
+                self.logger.handle.info('Nvidia Jetson/Tegra input detected, forcing Tegra stream format')
+                streamtype = 'tegra'
+            elif re.search("C920", self.card):
+                self.logger.handle.info("Logitech C920 detected, forcing H264 passthrough")
                 streamtype = 'h264'                                                                     
             # format not set, carry on and try to autodetect
             elif self.check_format('yuv'):
@@ -162,10 +173,9 @@ class visiondApp():
 
         # Create and start the stream
         try:
-            self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
-            self.stream = Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.config.args.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
+            self.logger.handle.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", input:"+self.input+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
+            Streamer(self.config, self.logger, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
         except Exception as e:
-            #self.logger.critical('Error creating '+streamtype+' stream:', traceback.print_exc())
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
 
         while not self._should_shutdown:
@@ -175,10 +185,10 @@ class visiondApp():
         # Log capability info
         cp = v4l2.v4l2_capability() 
         ioctl(self.vd, v4l2.VIDIOC_QUERYCAP, cp) 
-        self.logger.debug("driver: " + cp.driver.decode())
-        self.logger.debug("card: " + cp.card.decode())
-        self.driver = cp.driver
-        self.card = cp.card
+        self.logger.handle.debug("driver: " + cp.driver.decode())
+        self.logger.handle.debug("card: " + cp.card.decode())
+        self.driver = cp.driver.decode()
+        self.card = cp.card.decode()
         
         # Log controls available
         queryctrl = v4l2.v4l2_queryctrl(v4l2.V4L2_CID_BASE)
@@ -237,7 +247,7 @@ class visiondApp():
         available = False
         try:
             while (ioctl(self.vd, v4l2.VIDIOC_ENUM_FMT, capture) >= 0):
-                self.logger.debug("Format: {} : {}".format(format, capture.description.decode()))
+                self.logger.handle.debug("Checking format: {} : {}".format(format, capture.description.decode()))
                 if format.lower() == "h264":
                     if re.search('H264', capture.description.decode().lower()) or re.search('H.264', capture.description.decode().lower()):
                         available = True
