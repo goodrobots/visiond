@@ -156,26 +156,6 @@ class Streamer(object):
         capsfilter.set_property('caps', Gst.Caps.from_string(self.capstring))
         self.pipeline.add(capsfilter)
         self.source.link(capsfilter)
-        """
-        # Try and construct a parse element.
-        parse = Gst.ElementFactory.make("h264parse", "h264parse")
-        if parse:
-            logger.debug('h264parse element created')
-            self.pipeline.add(parse)
-            capsfilter.link(parse)
-        h264pay = Gst.ElementFactory.make("rtph264pay", "h264-payload")
-        h264pay.set_property("config-interval", 1)
-        h264pay.set_property("pt", 96)
-        h264pay.set_property("name", "pay0") # Set pay%d for rtsp stream pickup
-        self.pipeline.add(h264pay)
-        if parse:
-            logger.debug('Attaching h264pay to h264parse')
-            parse.link(h264pay)
-        else:
-            logger.debug('Attaching h264pay direct to capsfilter')
-            capsfilter.link(h264pay)
-        self.source_attach = h264pay
-        """
         self.source_attach = capsfilter
 
     def stream_mjpeg(self):
