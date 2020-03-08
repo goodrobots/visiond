@@ -40,6 +40,8 @@ class Streamer(object):
             self.input_appsrc()
         elif input == "v4l2":
             self.input_v4l2(source, brightness)
+        elif input == "nvarguscamerasrc":
+            self.input_tegra()
         
         # Next deal with each input format separately and interpret the stream and encoding method to the pipeline
         if format == "h264":
@@ -54,6 +56,9 @@ class Streamer(object):
             else:
                 self.capstring = None
             self.stream_yuv()
+        elif format == "tegra":
+            self.capstring = 'video/x-raw(memory:NVMM), format=NV12,width='+str(width)+',height='+str(height)+',framerate='+str(framerate)+'/1'
+            self.stream_tegra()
         else:
             self.logger.critical("Stream starting with unrecognised video format: " + str(format))
             return
@@ -139,14 +144,20 @@ class Streamer(object):
         self.source.set_property("do-timestamp",True)
         self.source.set_property("min-latency",0)
     
-    def input_v4l2(self, source, brightness):
-        if not source:
-            source = "/dev/video0"
-        self.logger.info("Attaching input 'v4l2': "+str(source))
+    def input_v4l2(self, device, brightness):
+        if not device:
+            device = "/dev/video0"
+        self.logger.info("Attaching input 'v4l2': "+str(device))
         self.pipeline = Gst.Pipeline.new()
         self.source = Gst.ElementFactory.make("v4l2src", "v4l2-source")
-        self.source.set_property("device", source)
+        self.source.set_property("device", device)
         self.source.set_property("brightness", brightness)
+        self.pipeline.add(self.source)
+
+    def input_tegra(self):
+        self.logger.info("Attaching input 'tegra' using nvarguscamerasrc")
+        self.pipeline = Gst.Pipeline.new()
+        self.source = Gst.ElementFactory.make("nvarguscamerasrc", "nvarguscamerasrc-source")
         self.pipeline.add(self.source)
 
     ### Stream methods
@@ -219,61 +230,81 @@ class Streamer(object):
         queue.link(vconvert)
         self.source_attach = vconvert
 
+    def stream_tegra(self):
+        self.logger.info("Attaching stream 'tegra'")
+        capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
+        capsfilter.set_property('caps', Gst.Caps.from_string(self.capstring))
+        self.pipeline.add(capsfilter)
+        self.source.link(capsfilter)
+        self.source_attach = capsfilter
+        
     ### Encoding methods
-    def encode_h264(self):
+    def encode_h264(self, encoder_type = None):
         self.logger.info("Attaching encoding 'h264'")
-        # Try and detect encoder
-        self.h264enc = None
-        # Detect Raspberry/OMX
-        if Gst.ElementFactory.find("omxh264enc"):
-            self.logger.info("Raspberry hardware encoder detected, using omxh264enc as h264 encoder")
-            self.h264enc = Gst.ElementFactory.make("omxh264enc", "raspberry-h264-encode")
-            self.h264enc.set_property('control-rate', 'variable')
-            self.h264enc.set_property('target-bitrate', 2000000)
-        """
-        # Detect Odroid/MFC
-        # Note this is disabled as it is now triggered on Raspberry and possibly other platforms, with latest gstreamer
-        try:
-            odroid264encoder = subprocess.check_output("gst-inspect-1.0 video4linux2 | grep 'H.264 Encoder' |awk -F: {'print $1'} |sed 's/\s//g' |tr -d '\n'", shell=True)
-            if odroid264encoder:
-                logger.info("Odroid MFC hardware encoder detected, attempting to use "+odroid264encoder+" as h264 encoder")
-                self.h264enc = Gst.ElementFactory.make(odroid264encoder, "odroid-h264-encode")
-                h264struct = Gst.Structure.new_empty("v4lencoder-extracontrols")
-                h264struct.encode = True
-                h264struct.h264_level = 10
-                h264struct.h264_profile = 4
-                h264struct.frame_level_rate_control_enable = 1
-                h264struct.frame_skip_enable = 1
-                h264struct.video_bitrate = 2000000
-                self.h264enc.set_property('extra-controls', h264struct)
-        except subprocess.CalledProcessError as e:
-            pass
-        """
+        ### First attempt to detect the best encoder type for the platform
+        _encoder_type = None
+        # If encoder type is manually set, use it as an override
+        if encoder_type:
+            _encoder_type = encoder_type
+        # Detect Nvidia encoder - note tegra hardware usually also has omx available so we detect this first
+        elif Gst.ElementFactory.find("nvv4l2h264enc"):
+            _encoder_type = "nvv4l2h264enc"
+        # Detect OMX hardware
+        elif Gst.ElementFactory.find("omxh264enc"):
+            _encoder_type = "omxh264enc"
         # Detect Intel/VAAPI
-        try:
-            # Determine vaapi encoder exists, but suppress output
-            with open(os.devnull, "w") as devnull:
-                vaapi264encoder = subprocess.call(["gst-inspect-1.0", "vaapih264enc"], stdout=devnull, stderr=devnull)
-            if not vaapi264encoder:
-                self.logger.info("VAAPI hardware encoder detected, attempting to use vaapi as h264 encoder")
-                self.h264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc")
-        except subprocess.CalledProcessError as e:
-            pass
-        # Otherwise use software encoder
-        if not self.h264enc:
+        elif Gst.ElementFactory.find("vaapih264enc"):
+            _encoder_type = "vaapih264enc"
+        # If h264 encoding hardware was not detected, use software encoder
+        else:
+            _encoder_type = "x264"
+
+        ### Create encoder element
+        self.h264enc = None
+
+        # Nvidia hardware
+        if _encoder_type == "nvv4l2h264enc":
+            self.logger.info("Nvidia hardware encoder detected, using nvv4l2h264enc as h264 encoder")
+            self.h264enc = Gst.ElementFactory.make("nvv4l2h264enc", "nvidia-h264-encode")
+            self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
+            self.h264enc.set_property('bitrate', 2000000)
+            self.h264enc.set_property('maxperf-enable', 1)
+            self.h264enc.set_property('preset-level', 1) # 1 = UltraFast
+            self.h264enc.set_property('MeasureEncoderLatency', 1)
+            self.h264enc.set_property('profile', 0) # 0 = BaseProfile which should usually be set for max compatibility particularly with webrtc. 2 = Main, 4 = High
+
+        # OMX hardware
+        elif _encoder_type == "omxh264enc":
+            self.logger.info("OMX hardware encoder detected, using omxh264enc as h264 encoder")
+            self.h264enc = Gst.ElementFactory.make("omxh264enc", "omx-h264-encode")
+            self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
+            self.h264enc.set_property('target-bitrate', 2000000)
+
+        # Intel hardware
+        elif _encoder_type == "vaapih264enc":
+            self.logger.info("VAAPI hardware encoder detected, using vaapih264enc as h264 encoder")
+            self.h264enc = Gst.ElementFactory.make("vaapih264enc", "vaapi-h264-encode")
+            self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
+            self.h264enc.set_property('target-bitrate', 2000000)
+            
+        # Software encoder
+        elif _encoder_type == "x264":
             self.logger.info("No hardware encoder detected, using software x264 encoder")
             self.h264enc = Gst.ElementFactory.make("x264enc", "x264-encode")
             self.h264enc.set_property('speed-preset', 1)
             self.h264enc.set_property('tune', 0x00000004)
+
+        # Attach the h264 element
         self.pipeline.add(self.h264enc)
         self.source_attach.link(self.h264enc)
-        # If using raspberry hardware encoder, specify caps explicitly otherwise it can get upset when using rtspserver
-        if Gst.ElementFactory.find("omxh264enc"):
-            x264capsfilter = Gst.ElementFactory.make("capsfilter", "x264capsfilter")
-            x264capsfilter.set_property('caps', Gst.Caps.from_string("video/x-h264,profile=high,width={},height={},framerate={}/1".format(self.width,self.height,self.framerate)))
-            self.pipeline.add(x264capsfilter)
-            self.h264enc.link(x264capsfilter)
-            self.encode_attach = x264capsfilter
+
+        # If using omx hardware encoder, specify caps explicitly otherwise it can get upset when using rtspserver
+        if _encoder_type == "omxh264enc":
+            h264capsfilter = Gst.ElementFactory.make("capsfilter", "h264capsfilter")
+            h264capsfilter.set_property('caps', Gst.Caps.from_string("video/x-h264,profile=high,width={},height={},framerate={}/1".format(self.width,self.height,self.framerate)))
+            self.pipeline.add(h264capsfilter)
+            self.h264enc.link(h264capsfilter)
+            self.encode_attach = h264capsfilter
         else:
             self.encode_attach = self.h264enc
         
@@ -291,7 +322,7 @@ class Streamer(object):
     ### Payload methods
     def payload_h264(self):
         self.logger.info("Attaching payload 'h264'")
-        # Try and construct a parse element.  This will fail on later (1.9+) gstreamer versions, so the subsequent (if parse) code bypasses if not present
+        # Attach an h264parse element.
         parse = Gst.ElementFactory.make("h264parse", "h264parse")
         if parse:
             self.logger.debug('h264parse element created')
