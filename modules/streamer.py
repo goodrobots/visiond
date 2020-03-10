@@ -17,18 +17,23 @@ Gst.init(None)
 
 ### Streamer Class to build up Gstreamer pipeline from in to out
 class Streamer(object):
-    def __init__(self, config, width, height, framerate, format, pixelformat, encoder, input, source, brightness, output, dest, port):
+    def __init__(self, config, format, pixelformat, encoder, input, device):
+        self.config = config
         self.size = 0
         self.playing = False
         self.paused = False
         self.format = format
         self.encoder = encoder
         self.payload = None # This is worked out later based on encoding and output type
-        self.width = width
-        self.height = height
-        self.framerate = framerate
-        self.output = output
-        self.config = config
+        self.device = device
+        self.width = int(self.config.args.width)
+        self.height = int(self.config.args.height)
+        self.framerate = int(self.config.args.framerate)
+        self.output = self.config.args.output
+        self.dest = self.config.args.output_dest
+        self.port = int(self.config.args.output_port)
+        self.brightness = int(self.config.args.brightness)
+        self.bitrate = int(self.config.args.bitrate)
         self.webrtc = None
         self.webrtc_signal_server = None
         self.glib_mainloop = None
@@ -39,25 +44,25 @@ class Streamer(object):
         if input == "appsrc":
             self.input_appsrc()
         elif input == "v4l2":
-            self.input_v4l2(source, brightness)
+            self.input_v4l2()
         elif input == "nvarguscamerasrc":
             self.input_tegra()
         
         # Next deal with each input format separately and interpret the stream and encoding method to the pipeline
         if format == "h264":
-            self.capstring = 'video/x-h264,width='+str(width)+',height='+str(height)+',framerate='+str(framerate)+'/1'
+            self.capstring = 'video/x-h264,width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             self.stream_h264()
         elif format == "mjpeg":
-            self.capstring = 'image/jpeg,width='+str(width)+',height='+str(height)+',framerate='+str(framerate)+'/1'
+            self.capstring = 'image/jpeg,width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             self.stream_mjpeg()
         elif format == "yuv":
             if pixelformat:
-                self.capstring = 'video/x-raw,format='+pixelformat+',width='+str(width)+',height='+str(height)+',framerate='+str(framerate)+'/1'
+                self.capstring = 'video/x-raw,format='+pixelformat+',width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             else:
                 self.capstring = None
             self.stream_yuv()
         elif format == "tegra":
-            self.capstring = 'video/x-raw(memory:NVMM), format=NV12,width='+str(width)+',height='+str(height)+',framerate='+str(framerate)+'/1'
+            self.capstring = 'video/x-raw(memory:NVMM), format=NV12,width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             self.stream_tegra()
         else:
             self.logger.critical("Stream starting with unrecognised video format: " + str(format))
@@ -78,9 +83,9 @@ class Streamer(object):
             return
         
         # Then work out which payload we want.
-        if output == "udp" or output == "rtsp" or output == "webrtc":
+        if self.output == "udp" or self.output == "rtsp" or self.output == "webrtc":
             # For now, we fix webrtc to h264, which automatically invokes the rtp264pay that we also want
-            if output == "webrtc":
+            if self.output == "webrtc":
                 encoder = "h264"
             # Now set payloads according to the encoder
             if encoder == "h264":
@@ -93,17 +98,17 @@ class Streamer(object):
             self.payload_attach = self.encode_attach
 
         # Finally connect the requested output to the end of the pipeline
-        if output == "file":
-            self.output_file(dest)
-        elif output == "udp":
-            self.output_udp(dest, port)
-        elif output == "dynudp":
+        if self.output == "file":
+            self.output_file()
+        elif self.output == "udp":
+            self.output_udp()
+        elif self.output == "dynudp":
             self.output_dynudp()
-        elif output == "rtsp":
-            self.output_rtsp(dest, port)
-        elif output == "wcast":
-            self.output_wcast(dest, port)
-        elif output == "webrtc":
+        elif self.output == "rtsp":
+            self.output_rtsp()
+        elif self.output == "wcast":
+            self.output_wcast()
+        elif self.output == "webrtc":
             self.output_webrtc()
 
         # Start the pipeline
@@ -144,14 +149,14 @@ class Streamer(object):
         self.source.set_property("do-timestamp",True)
         self.source.set_property("min-latency",0)
     
-    def input_v4l2(self, device, brightness):
-        if not device:
-            device = "/dev/video0"
-        self.logger.info("Attaching input 'v4l2': "+str(device))
+    def input_v4l2(self):
+        if not self.device:
+            self.device = "/dev/video0"
+        self.logger.info("Attaching input 'v4l2': "+str(self.device))
         self.pipeline = Gst.Pipeline.new()
         self.source = Gst.ElementFactory.make("v4l2src", "v4l2-source")
-        self.source.set_property("device", device)
-        self.source.set_property("brightness", brightness)
+        self.source.set_property("device", self.device)
+        self.source.set_property("brightness", self.brightness)
         self.pipeline.add(self.source)
 
     def input_tegra(self):
@@ -267,7 +272,7 @@ class Streamer(object):
             self.logger.info("Nvidia hardware encoder detected, using nvv4l2h264enc as h264 encoder")
             self.h264enc = Gst.ElementFactory.make("nvv4l2h264enc", "nvidia-h264-encode")
             self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
-            self.h264enc.set_property('bitrate', 2000000)
+            self.h264enc.set_property('bitrate', self.bitrate)
             self.h264enc.set_property('maxperf-enable', 1)
             self.h264enc.set_property('preset-level', 1) # 1 = UltraFast
             self.h264enc.set_property('MeasureEncoderLatency', 1)
@@ -277,15 +282,15 @@ class Streamer(object):
         elif _encoder_type == "omxh264enc":
             self.logger.info("OMX hardware encoder detected, using omxh264enc as h264 encoder")
             self.h264enc = Gst.ElementFactory.make("omxh264enc", "omx-h264-encode")
-            self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
-            self.h264enc.set_property('target-bitrate', 2000000)
+            self.h264enc.set_property('control-rate', 3) # 1: variable, 2: constant, 3: variable-skip-frames, 4: constant-skip-frames
+            self.h264enc.set_property('target-bitrate', self.bitrate)
 
         # Intel hardware
         elif _encoder_type == "vaapih264enc":
             self.logger.info("VAAPI hardware encoder detected, using vaapih264enc as h264 encoder")
             self.h264enc = Gst.ElementFactory.make("vaapih264enc", "vaapi-h264-encode")
             self.h264enc.set_property('control-rate', 0) # 0=variable, 1=constant
-            self.h264enc.set_property('target-bitrate', 2000000)
+            self.h264enc.set_property('target-bitrate', self.bitrate)
             
         # Software encoder
         elif _encoder_type == "x264":
@@ -293,6 +298,7 @@ class Streamer(object):
             self.h264enc = Gst.ElementFactory.make("x264enc", "x264-encode")
             self.h264enc.set_property('speed-preset', 1)
             self.h264enc.set_property('tune', 0x00000004)
+            self.h264enc.set_property('bitrate', self.bitrate / 1024)
 
         # Attach the h264 element
         self.pipeline.add(self.h264enc)
@@ -350,30 +356,30 @@ class Streamer(object):
         self.payload_attach = mjpegpay
 
     ### Output methods
-    def output_file(self, dest):
+    def output_file(self):
         self.logger.info("Attaching output 'file'")
         mux = Gst.ElementFactory.make("mpegtsmux", "mux")
         self.pipeline.add(mux)
         self.payload_attach.link(mux)
         
         sink = Gst.ElementFactory.make("filesink", "sink")
-        sink.set_property("location", dest)
+        sink.set_property("location", self.dest)
         self.pipeline.add(sink)
         mux.link(sink)
     
-    def output_udp(self, dest, port):
-        if not dest:
+    def output_udp(self):
+        if not self.dest:
             self.logger.warn("UDP destination must be set")
             return
-        self.logger.info("Attaching output 'udp', sending to "+str(dest)+":"+str(port))
+        self.logger.info("Attaching output 'udp', sending to "+str(self.dest)+":"+str(self.port))
         sink = Gst.ElementFactory.make("udpsink", "udpsink")
-        sink.set_property("host", dest)
-        sink.set_property("port", port)
+        sink.set_property("host", self.dest)
+        sink.set_property("port", self.port)
         sink.set_property("sync", False)
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
     
-    def output_wcast(self, dest, port):
+    def output_wcast(self):
         self.logger.info("Attaching output 'wcast'")
         # Create an OS pipe so we can attach the gstream pipeline to one end, and wifibroadcast tx to the other end
         read, write = os.pipe()
@@ -385,7 +391,7 @@ class Streamer(object):
         self.pipeline.add(sink)
         self.payload_attach.link(sink)
         # Spawn wifibroadcast tx
-        self.wcast_tx = subprocess.Popen(['/srv/maverick/software/wifibroadcast/tx','-b 8', '-r 4', '-f 1024', dest], stdin=read)
+        self.wcast_tx = subprocess.Popen(['/srv/maverick/software/wifibroadcast/tx','-b 8', '-r 4', '-f 1024',self.dest], stdin=read)
         self.logger.info("wcast tx pid:" + str(self.wcast_tx.pid))
         signal.signal(signal.SIGTERM, self.shutdown_tx)
 
@@ -394,15 +400,15 @@ class Streamer(object):
         sink = Gst.ElementFactory.make("dynudpsink", "dynudpsink")
         sink.set_property("sync", False)
         sink.set_property("bind-address", "0.0.0.0")
-        sink.set_property("bind-port", 5554)
+        sink.set_property("bind-port", self.port)
         self.pipeline.add(sink)
         self.encode_attach.link(sink)
 
-    def output_rtsp(self, dest, port):
+    def output_rtsp(self):
         self.logger.info("Attaching output 'rtsp'")
         self.rtspserver = GstRtspServer.RTSPServer()
-        self.rtspserver.set_address(dest)
-        self.rtspserver.set_service(str(port))
+        self.rtspserver.set_address(self.dest)
+        self.rtspserver.set_service(str(self.port))
 
         try:
             # Here we override RTSPMediaFactory to use the constructed object pipeline rather than the usual
@@ -416,7 +422,7 @@ class Streamer(object):
         self.rtspmounts.add_factory('/video', self.rtspfactory)
         self.rtspserver.attach(None)
 
-        self.logger.info("RTSP stream running at rtsp://"+str(dest)+":"+str(port)+"/video")
+        self.logger.info("RTSP stream running at rtsp://"+str(self.dest)+":"+str(self.port)+"/video")
 
     def output_webrtc(self):
         self.logger.info("Creating WebRTC Signal Server")

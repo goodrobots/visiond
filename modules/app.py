@@ -173,8 +173,8 @@ class visiondApp():
 
         # Create and start the stream
         try:
-            self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", input:"+self.input+", size:("+str(self.config.args.width)+" x "+str(self.config.args.height)+" / "+str(self.config.args.framerate)+"), output:"+self.config.args.output+", brightness:"+str(self.config.args.brightness))
-            Streamer(self.config, self.config.args.width, self.config.args.height, self.config.args.framerate, streamtype, pixelformat, encoder, self.input, cameradev, int(self.config.args.brightness), self.config.args.output, self.config.args.output_dest, int(self.config.args.output_port))
+            self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", input:"+self.input+", device:"+cameradev)
+            Streamer(self.config, streamtype, pixelformat, encoder, self.input, cameradev)
         except Exception as e:
             raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
 
