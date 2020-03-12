@@ -9,6 +9,7 @@ import time
 import v4l2
 import signal
 import sys
+import traceback
 from fcntl import ioctl
 
 from .config import *
@@ -47,7 +48,7 @@ class visiondApp():
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while not self._should_shutdown:
             try:
-                if 'pipeline_override' in self.config.args:
+                if 'pipeline_override' in self.config.args and self.config.args.pipeline_override:
                     self.logger.info("pipeline_override set, constructing manual pipeline")
                     self.manualconstruct()
                 else:
@@ -55,6 +56,7 @@ class visiondApp():
                     self.autoconstruct()
             except ValueError as e:
                 self.logger.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
+                self.logger.critical(traceback.print_exc())
                 time.sleep(self.retry)
 
     def manualconstruct(self):
@@ -77,10 +79,10 @@ class visiondApp():
         # If camera device set in config use it, otherwise autodetect
         cameradev = None
         devicepaths = glob.glob("/dev/video*")
-        try:
-            if self.config.args.camera_device:
-                cameradev = self.config.args.camera_device
-        except:
+        if self.config.args.camera_device:
+            self.logger.debug('camera_device specified: {}'.format(self.config.args.camera_device))
+            cameradev = self.config.args.camera_device
+        else:
             # device not set, carry on and try to autodetect
             for devicepath in sorted(devicepaths):
                 if not cameradev and self.check_input(devicepath):
@@ -123,10 +125,9 @@ class visiondApp():
 
         # If format set in config use it, otherwise autodetect
         streamtype = None
-        try:
-            if self.config.args.format:
-                streamtype = self.config.args.format
-        except:
+        if self.config.args.format:
+            streamtype = self.config.args.format
+        else:
             if self.input == "nvarguscamerasrc":
                 self.logger.info('Nvidia Jetson/Tegra input detected, forcing Tegra stream format')
                 streamtype = 'tegra'
@@ -150,11 +151,8 @@ class visiondApp():
 
         # If encoder set in config use it, otherwise set to h264
         encoder = None
-        try:
-            if self.config.args.encoder:
-                encoder = self.config.args.encoder
-        except:
-            pass
+        if self.config.args.encoder:
+            encoder = self.config.args.encoder
         if not encoder:
             encoder = "h264"
         self.logger.debug("Using encoder: {}".format(encoder))
@@ -173,10 +171,10 @@ class visiondApp():
 
         # Create and start the stream
         try:
-            self.logger.info("Creating stream object - camera:"+cameradev+", stream:"+streamtype+", pixelformat:"+pixelformat+", encoder:"+encoder+", input:"+self.input+", device:"+cameradev)
+            self.logger.info("Creating stream object - device: {}, stream: {}, pixelformat: {}, encoder: {}, input: {}".format(cameradev, streamtype, pixelformat, encoder, self.input))
             Streamer(self.config, streamtype, pixelformat, encoder, self.input, cameradev)
         except Exception as e:
-            raise ValueError('Error creating '+streamtype+' stream: ' + str(repr(e)))
+            raise ValueError('Error creating {} stream: {}'.format(streamtype, repr(e)))
 
         while not self._should_shutdown:
             time.sleep(1)

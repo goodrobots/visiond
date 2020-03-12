@@ -252,6 +252,7 @@ class Streamer(object):
         # If encoder type is manually set, use it as an override
         if self.encoder_type:
             _encoder_type = self.encoder_type
+            self.logger.info("Encoder type override set: {}".format(_encoder_type))
         # Detect Nvidia encoder - note tegra hardware usually also has omx available so we detect this first
         elif Gst.ElementFactory.find("nvv4l2h264enc"):
             _encoder_type = "nvv4l2h264enc"
