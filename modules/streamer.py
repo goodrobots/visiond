@@ -24,6 +24,7 @@ class Streamer(object):
         self.paused = False
         self.format = format
         self.encoder = encoder
+        self.encoder_type = self.config.args.encoder_type
         self.payload = None # This is worked out later based on encoding and output type
         self.device = device
         self.width = int(self.config.args.width)
@@ -244,13 +245,13 @@ class Streamer(object):
         self.source_attach = capsfilter
         
     ### Encoding methods
-    def encode_h264(self, encoder_type = None):
+    def encode_h264(self):
         self.logger.info("Attaching encoding 'h264'")
         ### First attempt to detect the best encoder type for the platform
         _encoder_type = None
         # If encoder type is manually set, use it as an override
-        if encoder_type:
-            _encoder_type = encoder_type
+        if self.encoder_type:
+            _encoder_type = self.encoder_type
         # Detect Nvidia encoder - note tegra hardware usually also has omx available so we detect this first
         elif Gst.ElementFactory.find("nvv4l2h264enc"):
             _encoder_type = "nvv4l2h264enc"
