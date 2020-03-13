@@ -29,7 +29,7 @@ class visiondConfig:
         self.parser.add_argument('--height', '-ht', default=480, help="Resolution height of video stream, must be valid for camera")
         self.parser.add_argument('--framerate', '-fr', default=30, help="Framerate of video stream, must be valid for camera")
         self.parser.add_argument('--brightness', '-b', default=0, help="Brightness - 0 is automatic")
-        self.parser.add_argument('--input', '-i', help="Stream input type: v4l2 (fpv), appsrc (cv), nvarguscamerasrc (nvidia jetson csi)")
+        self.parser.add_argument('--input', '-i', default="v4l2", help="Stream input type: v4l2 (fpv), appsrc (cv), nvarguscamerasrc (nvidia jetson csi)")
         self.parser.add_argument('--output', '-o', default="rtsp", help="Stream output type: file (save video), udp (stream video), wcast (wifibroadcast), rtsp (rtsp server), webrtc (webrtc server")
         self.parser.add_argument('--output_dest', '-od', default="0.0.0.0", help="Output destination: filename (file output), IP address (udp/rtsp output), Interface (wcast output)")
         self.parser.add_argument('--output_port', '-op', default="5600", help="Output port: Port number (eg. 5000) for network destination, Channel for wifibroadcast output (eg. 1)")
