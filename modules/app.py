@@ -165,7 +165,7 @@ class visiondApp():
             pixelformat = "I420"
             
         # If raw pixelformat set in config override the defaults
-        if 'pixelformat' in self.config.args:
+        if 'pixelformat' in self.config.args and self.config.args.pixelformat:
                 pixelformat = self.config.args.pixelformat
         self.logger.debug("Using pixelformat: {}".format(pixelformat))
 
