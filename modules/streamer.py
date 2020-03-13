@@ -6,7 +6,7 @@ import subprocess
 import threading
 import sys
 
-from .rtsp import *
+from .rtspfactory import *
 from .webrtc import *
 from .webrtc_signalserver import *
 
@@ -27,6 +27,7 @@ class Streamer(object):
         self.encoder_type = self.config.args.encoder_type
         self.payload = None # This is worked out later based on encoding and output type
         self.device = device
+        self.pixelformat = pixelformat
         self.width = int(self.config.args.width)
         self.height = int(self.config.args.height)
         self.framerate = int(self.config.args.framerate)
@@ -57,10 +58,7 @@ class Streamer(object):
             self.capstring = 'image/jpeg,width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             self.stream_mjpeg()
         elif format == "yuv":
-            if pixelformat:
-                self.capstring = 'video/x-raw,format='+pixelformat+',width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
-            else:
-                self.capstring = None
+            self.capstring = 'video/x-raw,format='+self.pixelformat+',width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
             self.stream_yuv()
         elif format == "tegra":
             self.capstring = 'video/x-raw(memory:NVMM), format=NV12,width='+str(self.width)+',height='+str(self.height)+',framerate='+str(self.framerate)+'/1'
@@ -419,12 +417,49 @@ class Streamer(object):
         except Exception as e:
             self.logger.critical("Error creating rstpfactory: "+repr(e))
         
+        # Set the media to shared and reusable
+        self.rtspfactory.set_shared(True)
+        self.rtspfactory.set_eos_shutdown(False)
+        self.rtspfactory.set_stop_on_disconnect(False)
+        self.rtspfactory.set_suspend_mode(GstRtspServer.RTSPSuspendMode.NONE) # Do not suspend the media
+
+        # Tune for minimum latency
+        self.rtspfactory.set_buffer_size(0)
+        self.rtspfactory.set_latency(0)
+        try:
+            self.rtspfactory.set_do_retransmission(False)
+        except:
+            self.logger.info('RTSP set_do_retransmission not available in this version of GStreamer')
+
         # Add the /video endpoint.  More/dynamic endpoints will be added in the future
+        self.rtspfactory.set_transport_mode(GstRtspServer.RTSPTransportMode.PLAY)
         self.rtspmounts = self.rtspserver.get_mount_points()
         self.rtspmounts.add_factory('/video', self.rtspfactory)
         self.rtspserver.attach(None)
 
+        # Attach a signal callback for when the media is constructed
+        self.rtspfactory.connect("media_constructed", self.on_rtsp_media)
+        self.rtsp_fakeclient()
+        
         self.logger.info("RTSP stream running at rtsp://"+str(self.dest)+":"+str(self.port)+"/video")
+
+
+    def on_rtsp_media(self, rtspfactory, rtspmedia):
+        self.rtspmedia = rtspmedia
+        self.rtspmedia.set_reusable(True)
+        self.rtspmedia.set_shared(True)
+        self.rtspmedia.set_buffer_size(0)
+        self.rtspmedia.set_latency(0)
+        self.logger.info("RTSPMedia constructed: reusable: {}, shared: {}, stopondisconnect: {}, latency: {}".format(self.rtspmedia.is_reusable(), self.rtspmedia.is_shared(), self.rtspmedia.is_stop_on_disconnect(), self.rtspmedia.get_latency()))
+        # Now create a fake client to hold the media open
+        #self.rtsp_fakeclient()
+        
+    def rtsp_fakeclient(self):
+        self.logger.info("Creating fake RTSP client to hold RTSPMedia open and prevent the pipeline from collapsing in the future")
+        client_pipeline = Gst.parse_launch("rtspsrc name=rtspclient latency=0 ! fakesink sync=false")
+        source = client_pipeline.get_by_name("rtspclient")
+        source.props.location =  "rtsp://localhost:{}/video".format(self.port)
+        client_pipeline.set_state(Gst.State.PLAYING)
 
     def output_webrtc(self):
         self.logger.info("Creating WebRTC Signal Server")
@@ -441,8 +476,9 @@ class Streamer(object):
     def on_message(self, bus, message):
         t = message.type
         if t == Gst.MessageType.EOS:
-            self.pipeline.set_state(Gst.State.NULL)
             self.playing = False
+            self.pipeline.set_state(Gst.State.READY)
+            self.logger.info("Stream EOS, setting piepline state to READY")            
         elif t == Gst.MessageType.ERROR:
             self.pipeline.set_state(Gst.State.NULL)
             err, debug = message.parse_error()
