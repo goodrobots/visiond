@@ -439,10 +439,11 @@ class Streamer(object):
 
         # Attach a signal callback for when the media is constructed
         self.rtspfactory.connect("media_constructed", self.on_rtsp_media)
+
+        # Create a fake rtsp client that sits and listens permanently, to stop GSTMedia pipeline from being destroyed 
         self.rtsp_fakeclient()
         
         self.logger.info("RTSP stream running at rtsp://"+str(self.dest)+":"+str(self.port)+"/video")
-
 
     def on_rtsp_media(self, rtspfactory, rtspmedia):
         self.rtspmedia = rtspmedia
@@ -451,9 +452,7 @@ class Streamer(object):
         self.rtspmedia.set_buffer_size(0)
         self.rtspmedia.set_latency(0)
         self.logger.info("RTSPMedia constructed: reusable: {}, shared: {}, stopondisconnect: {}, latency: {}".format(self.rtspmedia.is_reusable(), self.rtspmedia.is_shared(), self.rtspmedia.is_stop_on_disconnect(), self.rtspmedia.get_latency()))
-        # Now create a fake client to hold the media open
-        #self.rtsp_fakeclient()
-        
+
     def rtsp_fakeclient(self):
         self.logger.info("Creating fake RTSP client to hold RTSPMedia open and prevent the pipeline from collapsing in the future")
         client_pipeline = Gst.parse_launch("rtspsrc name=rtspclient latency=0 ! fakesink sync=false")
