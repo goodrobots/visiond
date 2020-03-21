@@ -14,7 +14,7 @@ from fcntl import ioctl
 
 from .config import *
 from .streamer import *
-from .Advertise import StreamAdvert
+from .advertise import StreamAdvert
 
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib,Gst
