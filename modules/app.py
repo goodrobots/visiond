@@ -48,7 +48,7 @@ class visiondApp():
             self.retry = float(self.config.args.retry)
 
         # Start the zeroconf server
-        self.zeroconf = StreamAdvert()
+        self.zeroconf = StreamAdvert(self.config)
         self.zeroconf.start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
