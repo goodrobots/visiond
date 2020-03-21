@@ -14,6 +14,7 @@ from fcntl import ioctl
 
 from .config import *
 from .streamer import *
+from .Advertise import StreamAdvert
 
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib,Gst
@@ -25,6 +26,7 @@ class visiondApp():
         self.config = config
         self.logger = logging.getLogger('visiond.' + __name__)
         self.stream = None
+        self.zeroconf = None
         self._should_shutdown = False
 
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -44,6 +46,10 @@ class visiondApp():
             self.retry = 30
         else:
             self.retry = float(self.config.args.retry)
+
+        # Start the zeroconf server
+        self.zeroconf = StreamAdvert()
+        self.zeroconf.start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while not self._should_shutdown:
@@ -173,6 +179,8 @@ class visiondApp():
         try:
             self.logger.info("Creating stream object - device: {}, stream: {}, pixelformat: {}, encoder: {}, input: {}".format(cameradev, streamtype, pixelformat, encoder, self.input))
             Streamer(self.config, streamtype, pixelformat, encoder, self.input, cameradev)
+            # Update the stream advertisement with the new info
+            self.zeroconf.update({"foo":"bazz"})
         except Exception as e:
             raise ValueError('Error creating {} stream: {}'.format(streamtype, repr(e)))
 
@@ -273,3 +281,6 @@ class visiondApp():
                 self.stream.webrtc_signal_server.shutdown()
                 self.stream.webrtc_signal_server.join()
             self.stream.stop()
+        if self.zeroconf:
+            self.zeroconf.shutdown()
+            self.zeroconf.join()
