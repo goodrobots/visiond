@@ -33,6 +33,8 @@ class StreamAdvert(threading.Thread):
             # TODO: FIXME come up with useful values for the info below
             "_http._tcp.local.",
             "visiond._http._tcp.local.",
+            addresses=[socket.inet_aton("0.0.0.0")],
+            port=int(self.config.args.output_port),
             properties=desc.copy(),
             server=f"{socket.getfqdn()}.",
         )
