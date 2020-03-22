@@ -41,7 +41,7 @@ class StreamAdvert(threading.Thread):
         self.logger.info("Zeroconf advertisement thread is starting...")
         try:
             self.zeroconf = Zeroconf(ip_version=self.ip_version)
-            self.register_service(self.service_info)
+            self.register_service()
         except OSError as e:
             # the port was blocked
             self.logger.info.error(
