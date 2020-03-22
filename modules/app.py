@@ -180,8 +180,9 @@ class visiondApp():
             self.logger.info("Creating stream object - device: {}, stream: {}, pixelformat: {}, encoder: {}, input: {}".format(cameradev, streamtype, pixelformat, encoder, self.input))
             Streamer(self.config, streamtype, pixelformat, encoder, self.input, cameradev)
             # Update the stream advertisement with the new info
-            self.zeroconf.update({"foo":"bazz"})
+            self.zeroconf.update({"stream":"replace_with_stream_info"})
         except Exception as e:
+            self.zeroconf.update({"stream":""})
             raise ValueError('Error creating {} stream: {}'.format(streamtype, repr(e)))
 
         while not self._should_shutdown:
