@@ -14,7 +14,7 @@ class StreamAdvert(threading.Thread):
 
         # Attempt to redirect the default handler into our log files
         default_zeroconf_logger = logging.getLogger("zeroconf")
-        default_zeroconf_logger.setLevel(logging.DEBUG)  # TODO: Set based on config
+        default_zeroconf_logger.setLevel(logging.INFO)  # TODO: Set based on config
         default_zeroconf_logger.propagate = True
         for handler in logging.getLogger("visiond").handlers:
             default_zeroconf_logger.addHandler(handler)
