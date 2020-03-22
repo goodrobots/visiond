@@ -26,16 +26,15 @@ class StreamAdvert(threading.Thread):
         self.ip_version = IPVersion.V4Only  # IPVersion.All
 
         self.desc = {"stream": "", "service_type": "visiond"}
-        self.service_info = self.build_service_info(self.desc)
+        self.service_info = self.build_service_info()
 
-    def build_service_info(self, desc={}):
+    def build_service_info(self):
         return ServiceInfo(
-            # TODO: FIXME come up with useful values for the info below
-            "_http._tcp.local.",
-            "visiond._http._tcp.local.",
-            addresses=[socket.inet_aton("0.0.0.0")],
-            port=int(self.config.args.output_port),
-            properties=desc.copy(),
+            "_rtsp._udp.local.",
+            "visiond ._rtsp._udp.local.",
+            addresses=[socket.inet_aton(self.config.args.output_dest)],
+            port=self.config.args.output_port,
+            properties=self.desc,
             server=f"{socket.getfqdn()}.",
         )
 
@@ -81,9 +80,8 @@ class StreamAdvert(threading.Thread):
 
         # Merge the dicts and apply the updates
         self.desc = {**self.desc, **desc_update}
-        service_info = self.build_service_info(self.desc)
-        self.zeroconf.update_service(service_info)
-        self.service_info = service_info
+        self.service_info = self.build_service_info()
+        self.zeroconf.update_service(self.service_info)
 
     def unregister_service(self):
         self.zeroconf.unregister_service(self.service_info)
@@ -93,3 +91,4 @@ class StreamAdvert(threading.Thread):
 
     def update(self, **desc_update):
         self._q.put_nowait(desc_update)
+    
