@@ -4,38 +4,35 @@ import socket
 import queue
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
+
 class StreamAdvert(threading.Thread):
     def __init__(self, config):
         threading.Thread.__init__(self)
         self.daemon = True
         self.config = config
-        self.logger = logging.getLogger('visiond.' + __name__)
+        self.logger = logging.getLogger("visiond." + __name__)
 
         # Attempt to redirect the default handler into our log files
         default_zeroconf_logger = logging.getLogger("zeroconf")
-        default_zeroconf_logger.setLevel(logging.DEBUG) # TODO: Set based on config
+        default_zeroconf_logger.setLevel(logging.DEBUG)  # TODO: Set based on config
         default_zeroconf_logger.propagate = True
         for handler in logging.getLogger("visiond").handlers:
             default_zeroconf_logger.addHandler(handler)
-        
+
         self.zeroconf = None
         self._should_shutdown = threading.Event()
         self._q = queue.Queue()
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
-        
-        self.desc = {
-            "foo": "barr"
-        }
-        self.service_info = build_service_info(self.desc)
+
+        self.desc = {"stream": "", "service_type": "visiond"}
+        self.service_info = self.build_service_info(self.desc)
 
     def build_service_info(self, desc={}):
         return ServiceInfo(
             # TODO: FIXME come up with useful values for the info below
             "_http._tcp.local.",
             "visiond._http._tcp.local.",
-            addresses=[socket.inet_aton('replace_with_interface_from_options')],
-            port='replace_with_port_from_options',
             properties=desc.copy(),
             server=f"{socket.getfqdn()}.",
         )
@@ -73,7 +70,7 @@ class StreamAdvert(threading.Thread):
 
     def register_service(self):
         self.zeroconf.register_service(self.service_info)
-    
+
     def update_service(self, desc_update):
         # it does not look like there is a nice way to update
         #  the properties field of a service.
@@ -85,7 +82,7 @@ class StreamAdvert(threading.Thread):
         service_info = self.build_service_info(self.desc)
         self.zeroconf.update_service(service_info)
         self.service_info = service_info
-    
+
     def unregister_service(self):
         self.zeroconf.unregister_service(self.service_info)
 
