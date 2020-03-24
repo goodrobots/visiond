@@ -12,40 +12,14 @@ import sys
 import traceback
 from fcntl import ioctl
 
-import tornado.ioloop
-import tornado.web
-import tornado.websocket
-from tornado.options import define, options
-define("port", default=1235, help="Port to listen on", type=int)
-
 from .config import *
 from .streamer import *
 from .advertise import StreamAdvert
+from .janus import JanusInterface
 
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib,Gst
 Gst.init(None)
-
-class TApp(tornado.web.Application):
-    def __init__(self):
-        # Setup websocket handler
-        handlers = [(r"/", JanusHandler)]
-        settings = dict(
-            cookie_secret="asdlkfjhfiguhefgrkjbfdlgkjadfh",
-            xsrf_cookies=True,
-        )
-        super(TApp, self).__init__(handlers, **settings)
-
-class JanusHandler(tornado.websocket.WebSocketHandler):
-    def open(self):
-        self.logger = logging.getLogger('visiond.janushandler')
-
-    def on_close(self):
-        self.logger.info("Closing JanusHandler websocket connection")
-
-    def on_message(self, message):
-        parsed = tornado.escape.json_decode(message)
-        self.logger.debug("got message %r", message)
 
 ### Main visiond App Class
 class visiondApp():
@@ -79,10 +53,8 @@ class visiondApp():
             self.zeroconf = StreamAdvert(self.config)
             self.zeroconf.start()
 
-        # Start the tornado websocket server
-        tapp = TApp()
-        tapp.listen(options.port)
-        #tornado.ioloop.IOLoop.instance().start()
+        self.janus = JanusInterface(self.config)
+        self.janus.start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while not self._should_shutdown:
@@ -317,6 +289,9 @@ class visiondApp():
                 self.stream.webrtc_signal_server.shutdown()
                 self.stream.webrtc_signal_server.join()
             self.stream.stop()
+        if self.janus:
+            self.janus.shutdown()
+            self.zeroconf.join()
         if self.zeroconf:
             self.zeroconf.shutdown()
             self.zeroconf.join()
