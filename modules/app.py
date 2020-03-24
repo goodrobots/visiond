@@ -12,11 +12,11 @@ import sys
 import traceback
 from fcntl import ioctl
 
-#import tornado.ioloop
+import tornado.ioloop
 import tornado.web
 import tornado.websocket
-#from tornado.options import define, options
-#define("port", default=1235, help="Port to listen on", type=int)
+from tornado.options import define, options
+define("port", default=1235, help="Port to listen on", type=int)
 
 from .config import *
 from .streamer import *
@@ -80,11 +80,9 @@ class visiondApp():
             self.zeroconf.start()
 
         # Start the tornado websocket server
-        """
         tapp = TApp()
         tapp.listen(options.port)
-        tornado.ioloop.IOLoop.instance().start()
-        """
+        #tornado.ioloop.IOLoop.instance().start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while not self._should_shutdown:
