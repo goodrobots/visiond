@@ -88,5 +88,5 @@ class StreamAdvert(threading.Thread):
     def shutdown(self):
         self._should_shutdown.set()
 
-    def update(self, **desc_update):
+    def update(self, desc_update):
         self._q.put_nowait(desc_update)
