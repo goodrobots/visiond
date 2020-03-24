@@ -35,7 +35,6 @@ class StreamAdvert(threading.Thread):
             addresses=[socket.inet_aton(self.config.args.output_dest)],
             port=self.config.args.output_port,
             properties=self.desc,
-            server=f"{socket.getfqdn()}.",
         )
 
     def run(self):
