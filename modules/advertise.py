@@ -70,7 +70,7 @@ class StreamAdvert(threading.Thread):
         self.logger.info("Zeroconf advertisement thread has stopped.")
 
     def register_service(self):
-        self.zeroconf.register_service(self.service_info)
+        self.zeroconf.register_service(self.service_info, cooperating_responders=True)
 
     def update_service(self, desc_update):
         # it does not look like there is a nice way to update
@@ -91,4 +91,3 @@ class StreamAdvert(threading.Thread):
 
     def update(self, **desc_update):
         self._q.put_nowait(desc_update)
-    

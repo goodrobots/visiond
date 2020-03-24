@@ -39,6 +39,7 @@ class visiondConfig:
         self.parser.add_argument('--logdest', '-ld', default='both', help="Log destination - can be file, console or both (if run through systemd, console will log to system journal)")
         self.parser.add_argument('--logdir', '-li', default="/var/tmp/visiond", help="Log directory, if file logging set")
         self.parser.add_argument('--debug', '-d', help="Debug: Turns on gstreamer debug to the specified level.  Note level 4 and above is very verbose")
+        self.parser.add_argument('--zeroconf', '-z', default=1, help="Control if the service is advertised via zeroconf")
         self.parser.add_argument('--ssl_keyfile', '-sk', help="Set the path to SSL key for webrtc signalling server")
         self.parser.add_argument('--ssl_certfile', '-sc', help="Set the path to SSL cert for webrtc signalling server")
 

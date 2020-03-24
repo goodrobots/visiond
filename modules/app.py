@@ -47,9 +47,10 @@ class visiondApp():
         else:
             self.retry = float(self.config.args.retry)
 
-        # Start the zeroconf server
-        self.zeroconf = StreamAdvert(self.config)
-        self.zeroconf.start()
+        # Start the zeroconf thread
+        if self.config.args.zeroconf:
+            self.zeroconf = StreamAdvert(self.config)
+            self.zeroconf.start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.
         while not self._should_shutdown:
@@ -179,10 +180,12 @@ class visiondApp():
         try:
             self.logger.info("Creating stream object - device: {}, stream: {}, pixelformat: {}, encoder: {}, input: {}".format(cameradev, streamtype, pixelformat, encoder, self.input))
             Streamer(self.config, streamtype, pixelformat, encoder, self.input, cameradev)
-            # Update the stream advertisement with the new info
-            self.zeroconf.update({"stream":"replace_with_stream_info"})
+            if self.zeroconf:
+                # Update the stream advertisement with the new info
+                self.zeroconf.update({"stream":"replace_with_stream_info"})
         except Exception as e:
-            self.zeroconf.update({"stream":""})
+            if self.zeroconf:
+                self.zeroconf.update({"stream":""})
             raise ValueError('Error creating {} stream: {}'.format(streamtype, repr(e)))
 
         while not self._should_shutdown:
