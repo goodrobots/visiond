@@ -7,6 +7,12 @@ import tornado.websocket
 from tornado.options import define, options
 
 define("port", default=1235, help="Port to listen on", type=int)
+define(
+    "interface",
+    default="127.0.0.1",
+    type=str,
+    help="Interface to listen on: 0.0.0.0 represents all interfaces",
+)
 
 
 class TApp(tornado.web.Application):
@@ -22,6 +28,7 @@ class TApp(tornado.web.Application):
 class JanusHandler(tornado.websocket.WebSocketHandler):
     def open(self):
         self.logger = logging.getLogger("visiond.janushandler")
+        self.logger.info("Opening JanusHandler websocket connection")
 
     def on_close(self):
         self.logger.info("Closing JanusHandler websocket connection")
@@ -59,24 +66,24 @@ class JanusInterface(threading.Thread):
 
     def run(self):
         self.logger.info("Janus interface thread is starting...")
-        asyncio.run(self.main())
+        ioloop = tornado.ioloop.IOLoop.current()
+        tornado.ioloop.PeriodicCallback(self.check_for_shutdown(), 1000).start()
+        application = TApp()
+        server = tornado.httpserver.HTTPServer(application, ssl_options=None)
+        server.listen(port=options.port, address=options.interface)
+        ioloop.start()
         # this function blocks at this point until the server
         #  is asked to exit via shutdown()
         self.logger.info("Janus interface thread has stopped.")
 
-    async def main(self):
-        self.setup_server()
-        asyncio.create_task(self.wait_for_shutdown())
+    def request_stop(self):
+        ioloop = tornado.ioloop.IOLoop.current()
+        ioloop.add_callback(ioloop.stop)
 
-    def setup_server(self):
-        application = TApp()
-        server = tornado.httpserver.HTTPServer(application)
-        server.listen(port=options.port)
-
-    async def wait_for_shutdown(self):
-        while not self._should_shutdown.is_set():
-            await asyncio.sleep(1)
-        self.logger.info("Janus interface thread is stopping...")
+    def check_for_shutdown(self):
+        if self._should_shutdown.is_set():
+            self.request_stop()
+            self.logger.info("Janus interface thread is stopping...")
 
     def shutdown(self):
         self._should_shutdown.set()
