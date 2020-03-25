@@ -292,7 +292,7 @@ class visiondApp():
             self.stream.stop()
         if self.janus:
             self.janus.shutdown()
-            self.zeroconf.join()
+            self.janus.join()
         if self.zeroconf:
             self.zeroconf.shutdown()
             self.zeroconf.join()
