@@ -53,8 +53,10 @@ class visiondApp():
         if self.config.args.zeroconf:
             self.zeroconf = StreamAdvert(self.config)
             self.zeroconf.start()
+        else:
+            self.zeroconf = None
 
-        self.janus = JanusInterface(self.config)
+        self.janus = JanusInterface(self.config, self.zeroconf)
         self.janus.start()
 
         # Start the pipeline.  Trap any errors and wait for 30sec before trying again.

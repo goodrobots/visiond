@@ -1,10 +1,14 @@
 import threading
 import logging
 import asyncio
+import requests
+from urllib3.exceptions import InsecureRequestWarning
+import socket
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
 from tornado.options import define, options
+from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 define("port", default=1235, help="Port to listen on", type=int)
 define(
@@ -16,9 +20,9 @@ define(
 
 
 class TApp(tornado.web.Application):
-    def __init__(self):
+    def __init__(self, zeroconf):
         # Setup websocket handler
-        handlers = [(r"/", JanusHandler)]
+        handlers = [(r"/", JanusHandler, {'zeroconf': zeroconf})]
         settings = dict(
             cookie_secret="asdlkfjhfiguhefgrkjbfdlgkjadfh", xsrf_cookies=True,
         )
@@ -26,6 +30,9 @@ class TApp(tornado.web.Application):
 
 
 class JanusHandler(tornado.websocket.WebSocketHandler):
+    def initialize(self, zeroconf):
+        self.zeroconf = zeroconf
+        
     def open(self):
         self.logger = logging.getLogger("visiond.janushandler")
         self.logger.info("Opening JanusHandler websocket connection")
@@ -36,17 +43,32 @@ class JanusHandler(tornado.websocket.WebSocketHandler):
     def on_message(self, message):
         parsed = tornado.escape.json_decode(message)
         self.logger.debug("got message %r", message)
-
+        if parsed['type'] == 256:
+            self.logger.debug("Received janus event: {} : {}".format(parsed['type'], parsed['event']))
+            _serviceinfo = ServiceInfo(
+                "_webrtc._udp.local.",
+                "Maverick WebRTC._webrtc._udp.local.",
+                addresses=[socket.inet_aton('0.0.0.0')],
+                port=6796,
+                properties={"port": 6796, "service_type": "webrtc"},
+            )
+            self.zeroconf.register_service(_serviceinfo)
+        
     def get_compression_options(self):
         return {}
 
+    def check_origin(self, origin):
+        return True
 
 class JanusInterface(threading.Thread):
-    def __init__(self, config):
+    def __init__(self, config, zeroconf):
         threading.Thread.__init__(self)
         self.daemon = True
         self.config = config
+        self.zeroconf = zeroconf
         self.logger = logging.getLogger("visiond." + __name__)
+
+        self.get_info()
 
         # Attempt to redirect the default handlers into our log files
         tornado_loggers = [
@@ -64,12 +86,32 @@ class JanusInterface(threading.Thread):
 
         self._should_shutdown = threading.Event()
 
+    def get_info(self):
+        url = 'https://localhost:6795/janus/info'
+        requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+        _request = requests.get(url='https://localhost:6795/janus/info', verify=False)
+        _data = _request.json()
+        try:
+            #print("janus info: {}".format(_data))
+            if _data['janus'] == 'server_info' and _data['server-name'] == 'Maverick':
+                self.logger.info("Maverick janus webrtc service detected, registering with zeroconf")
+                _serviceinfo = ServiceInfo(
+                    "_webrtc._udp.local.",
+                    "Maverick WebRTC._webrtc._udp.local.",
+                    addresses=[socket.inet_aton('0.0.0.0')],
+                    port=int(6796),
+                    properties={"port": int(6796), "service_type": "webrtc"},
+                )
+                self.zeroconf.register_service(_serviceinfo)
+        except Exception as e:
+            pass
+
     def run(self):
         self.logger.info("Janus interface thread is starting...")
         asyncio.set_event_loop(asyncio.new_event_loop())
         self.ioloop = tornado.ioloop.IOLoop.current()
         tornado.ioloop.PeriodicCallback(self.check_for_shutdown, 1000, jitter = 0.1).start()
-        application = TApp()
+        application = TApp(self.zeroconf)
         server = tornado.httpserver.HTTPServer(application, ssl_options=None)
         server.listen(port=options.port, address=options.interface)
         self.ioloop.start()

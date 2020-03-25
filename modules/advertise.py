@@ -25,23 +25,22 @@ class StreamAdvert(threading.Thread):
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
 
-        self.desc = {"stream": "", "service_type": "visiond"}
-        self.service_info = self.build_service_info()
+        self.service_info = self.build_service_info({"stream": "", "service_type": "visiond"})
 
-    def build_service_info(self):
+    def build_service_info(self, props, _type='visiond'):
         return ServiceInfo(
             "_rtsp._udp.local.",
-            "visiond ._rtsp._udp.local.",
+            "{} ._rtsp._udp.local.".format(_type),
             addresses=[socket.inet_aton(self.config.args.output_dest)],
-            port=self.config.args.output_port,
-            properties=self.desc,
+            port=int(self.config.args.output_port),
+            properties=props,
         )
 
     def run(self):
         self.logger.info("Zeroconf advertisement thread is starting...")
         try:
             self.zeroconf = Zeroconf(ip_version=self.ip_version)
-            self.register_service()
+            self.register_service(self.service_info)
         except OSError as e:
             # the port was blocked
             self.logger.info.error(
@@ -68,8 +67,8 @@ class StreamAdvert(threading.Thread):
             self.zeroconf.close()
         self.logger.info("Zeroconf advertisement thread has stopped.")
 
-    def register_service(self):
-        self.zeroconf.register_service(self.service_info, cooperating_responders=True)
+    def register_service(self, service_info):
+        self.zeroconf.register_service(service_info, cooperating_responders=True)
 
     def update_service(self, desc_update):
         # it does not look like there is a nice way to update
@@ -78,8 +77,7 @@ class StreamAdvert(threading.Thread):
         #  but update the properties.
 
         # Merge the dicts and apply the updates
-        self.desc = {**self.desc, **desc_update}
-        self.service_info = self.build_service_info()
+        self.service_info = self.build_service_info(desc_update)
         self.zeroconf.update_service(self.service_info)
 
     def unregister_service(self):
