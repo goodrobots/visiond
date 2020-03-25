@@ -28,6 +28,7 @@ class visiondApp():
         self.logger = logging.getLogger('visiond.' + __name__)
         self.stream = None
         self.zeroconf = None
+        self.janus = None
         self._should_shutdown = False
 
         signal.signal(signal.SIGINT, self.signal_handler)

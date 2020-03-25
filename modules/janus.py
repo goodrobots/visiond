@@ -54,8 +54,8 @@ class JanusInterface(threading.Thread):
             for handler in logging.getLogger("visiond").handlers:
                 default_tornado_logger.addHandler(handler)
 
-        self.application = None
         self.loop = tornado.ioloop.IOLoop.current()
+        
 
     def run(self):
         self.logger.info("Janus interface thread is starting...")
@@ -64,12 +64,11 @@ class JanusInterface(threading.Thread):
         self.server = tornado.httpserver.HTTPServer(application)
         self.server.listen(port=options.port)
 
-        tornado.ioloop.IOLoop.current().start()
+        self.loop.start()
         # this function blocks at this point until the server
         #  is asked to exit via shutdown()
         self.logger.info("Janus interface thread has stopped.")
 
     def shutdown(self):
-        self.loop = tornado.ioloop.IOLoop.current()
         self.loop.add_callback(self.loop.stop)
         self.logger.info("Janus interface thread is stopping...")
