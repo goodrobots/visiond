@@ -1,5 +1,6 @@
 import threading
 import logging
+import asyncio
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
@@ -55,7 +56,6 @@ class JanusInterface(threading.Thread):
                 default_tornado_logger.addHandler(handler)
 
         self.loop = tornado.ioloop.IOLoop.current()
-        
 
     def run(self):
         self.logger.info("Janus interface thread is starting...")
@@ -63,12 +63,11 @@ class JanusInterface(threading.Thread):
         application = TApp()
         self.server = tornado.httpserver.HTTPServer(application)
         self.server.listen(port=options.port)
-
         self.loop.start()
         # this function blocks at this point until the server
         #  is asked to exit via shutdown()
         self.logger.info("Janus interface thread has stopped.")
 
     def shutdown(self):
-        self.loop.add_callback(self.loop.stop)
+        asyncio.run_coroutine_threadsafe(self.loop.stop, self.loop)
         self.logger.info("Janus interface thread is stopping...")
