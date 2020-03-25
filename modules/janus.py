@@ -66,6 +66,7 @@ class JanusInterface(threading.Thread):
 
     def run(self):
         self.logger.info("Janus interface thread is starting...")
+        asyncio.set_event_loop(asyncio.new_event_loop())
         ioloop = tornado.ioloop.IOLoop.current()
         tornado.ioloop.PeriodicCallback(self.check_for_shutdown(), 1000).start()
         application = TApp()
