@@ -67,23 +67,19 @@ class JanusInterface(threading.Thread):
     def run(self):
         self.logger.info("Janus interface thread is starting...")
         asyncio.set_event_loop(asyncio.new_event_loop())
-        ioloop = tornado.ioloop.IOLoop.current()
-        tornado.ioloop.PeriodicCallback(self.check_for_shutdown(), 1000).start()
+        self.ioloop = tornado.ioloop.IOLoop.current()
+        tornado.ioloop.PeriodicCallback(self.check_for_shutdown, 1000, jitter = 0.1).start()
         application = TApp()
         server = tornado.httpserver.HTTPServer(application, ssl_options=None)
         server.listen(port=options.port, address=options.interface)
-        ioloop.start()
+        self.ioloop.start()
         # this function blocks at this point until the server
         #  is asked to exit via shutdown()
         self.logger.info("Janus interface thread has stopped.")
 
-    def request_stop(self):
-        ioloop = tornado.ioloop.IOLoop.current()
-        ioloop.add_callback(ioloop.stop)
-
     def check_for_shutdown(self):
         if self._should_shutdown.is_set():
-            self.request_stop()
+            self.ioloop.add_callback(self.ioloop.stop)
             self.logger.info("Janus interface thread is stopping...")
 
     def shutdown(self):
