@@ -20,9 +20,9 @@ define(
 
 
 class TApp(tornado.web.Application):
-    def __init__(self, zeroconf):
+    def __init__(self, zeroconf, config):
         # Setup websocket handler
-        handlers = [(r"/", JanusHandler, {'zeroconf': zeroconf})]
+        handlers = [(r"/", JanusHandler, {'zeroconf': zeroconf, 'config': config})]
         settings = dict(
             cookie_secret="asdlkfjhfiguhefgrkjbfdlgkjadfh", xsrf_cookies=True,
         )
@@ -30,8 +30,9 @@ class TApp(tornado.web.Application):
 
 
 class JanusHandler(tornado.websocket.WebSocketHandler):
-    def initialize(self, zeroconf):
+    def initialize(self, zeroconf, config):
         self.zeroconf = zeroconf
+        self.config = config
         
     def open(self):
         self.logger = logging.getLogger("visiond.janushandler")
@@ -44,13 +45,13 @@ class JanusHandler(tornado.websocket.WebSocketHandler):
         parsed = tornado.escape.json_decode(message)
         self.logger.debug("got message %r", message)
         if parsed['type'] == 256:
-            self.logger.debug("Received janus event: {} : {}".format(parsed['type'], parsed['event']))
+            subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
             _serviceinfo = ServiceInfo(
                 "_webrtc._udp.local.",
-                "Maverick WebRTC._webrtc._udp.local.",
+                "visiond.webrtc {}._webrtc._udp.local.".format(subdesc),
                 addresses=[socket.inet_aton('0.0.0.0')],
                 port=6796,
-                properties={"port": 6796, "service_type": "webrtc"},
+                properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc"},
             )
             self.zeroconf.register_service(_serviceinfo)
         
@@ -95,12 +96,13 @@ class JanusInterface(threading.Thread):
             #print("janus info: {}".format(_data))
             if _data['janus'] == 'server_info' and _data['server-name'] == 'Maverick':
                 self.logger.info("Maverick janus webrtc service detected, registering with zeroconf")
+                subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
                 _serviceinfo = ServiceInfo(
                     "_webrtc._udp.local.",
-                    "Maverick WebRTC._webrtc._udp.local.",
+                    "visiond-webrtc {}._webrtc._udp.local.".format(subdesc),
                     addresses=[socket.inet_aton('0.0.0.0')],
-                    port=int(6796),
-                    properties={"port": int(6796), "service_type": "webrtc"},
+                    port=6796,
+                    properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc"},
                 )
                 self.zeroconf.register_service(_serviceinfo)
         except Exception as e:
@@ -111,7 +113,7 @@ class JanusInterface(threading.Thread):
         asyncio.set_event_loop(asyncio.new_event_loop())
         self.ioloop = tornado.ioloop.IOLoop.current()
         tornado.ioloop.PeriodicCallback(self.check_for_shutdown, 1000, jitter = 0.1).start()
-        application = TApp(self.zeroconf)
+        application = TApp(self.zeroconf, self.config)
         server = tornado.httpserver.HTTPServer(application, ssl_options=None)
         server.listen(port=options.port, address=options.interface)
         self.ioloop.start()

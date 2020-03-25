@@ -25,12 +25,13 @@ class StreamAdvert(threading.Thread):
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
 
-        self.service_info = self.build_service_info({"stream": "", "service_type": "visiond"})
+        self.service_info = self.build_service_info({"port": self.config.args.output_port, "name": self.config.args.name, "service_type": "visiond"})
 
     def build_service_info(self, props, _type='visiond'):
+        subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
         return ServiceInfo(
             "_rtsp._udp.local.",
-            "{} ._rtsp._udp.local.".format(_type),
+            "{} {} ._rtsp._udp.local.".format(_type, subdesc),
             addresses=[socket.inet_aton(self.config.args.output_dest)],
             port=int(self.config.args.output_port),
             properties=props,
