@@ -31,7 +31,7 @@ class StreamAdvert(threading.Thread):
         subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
         return ServiceInfo(
             "_rtsp._udp.local.",
-            "{} {} ._rtsp._udp.local.".format(_type, subdesc),
+            "{} ({}) ._rtsp._udp.local.".format(_type, subdesc),
             addresses=[socket.inet_aton(self.config.args.output_dest)],
             port=int(self.config.args.output_port),
             properties=props,

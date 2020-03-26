@@ -45,13 +45,15 @@ class JanusHandler(tornado.websocket.WebSocketHandler):
         parsed = tornado.escape.json_decode(message)
         self.logger.debug("got message %r", message)
         if parsed['type'] == 256:
-            subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+            _subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+            _network = f"{socket.getfqdn()}:6796"
+            _wsEndpoint = f"wss://{_network}"
             _serviceinfo = ServiceInfo(
                 "_webrtc._udp.local.",
-                "visiond.webrtc {}._webrtc._udp.local.".format(subdesc),
+                "visiond-webrtc ({})._webrtc._udp.local.".format(_subdesc),
                 addresses=[socket.inet_aton('0.0.0.0')],
                 port=6796,
-                properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc"},
+                properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
             )
             self.zeroconf.register_service(_serviceinfo)
         
@@ -96,13 +98,15 @@ class JanusInterface(threading.Thread):
             #print("janus info: {}".format(_data))
             if _data['janus'] == 'server_info' and _data['server-name'] == 'Maverick':
                 self.logger.info("Maverick janus webrtc service detected, registering with zeroconf")
-                subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+                _subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+                _network = f"{socket.getfqdn()}:6796"
+                _wsEndpoint = f"wss://{_network}"
                 _serviceinfo = ServiceInfo(
                     "_webrtc._udp.local.",
-                    "visiond-webrtc {}._webrtc._udp.local.".format(subdesc),
+                    "visiond-webrtc ({})._webrtc._udp.local.".format(_subdesc),
                     addresses=[socket.inet_aton('0.0.0.0')],
                     port=6796,
-                    properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc"},
+                    properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
                 )
                 self.zeroconf.register_service(_serviceinfo)
         except Exception as e:
