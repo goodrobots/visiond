@@ -2,7 +2,7 @@ import threading
 import logging
 import socket
 import queue
-from uuid import uuid5
+import uuid
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 
@@ -25,9 +25,10 @@ class StreamAdvert(threading.Thread):
         self._q = queue.Queue()
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
+        self.service_info = self.build_service_info()
 
-    def build_service_info(self, props, _type='visiond'):
-        _subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+    def build_service_info(self, props=None, _type='visiond'):
+        _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else self.config.args.output_port)
         _rtspurl = f"rtsp://{socket.getfqdn()}:{self.config.args.output_port}/video"
         if _type == 'visiond':
             return ServiceInfo(
@@ -61,7 +62,7 @@ class StreamAdvert(threading.Thread):
 
     def instance_uuid(self, url):
         # Create a repeatable uuid based on unique url
-        return str(uuid5(uuid.NAMESPACE_URL, url))
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, url))
 
     def run(self):
         self.logger.info("Zeroconf advertisement thread is starting...")
