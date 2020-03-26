@@ -28,9 +28,9 @@ class StreamAdvert(threading.Thread):
         self.service_info = self.build_service_info()
 
     def build_service_info(self, props=None, _type='visiond'):
-        _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else self.config.args.output_port)
-        _rtspurl = f"rtsp://{socket.getfqdn()}:{self.config.args.output_port}/video"
         if _type == 'visiond':
+            _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else self.config.args.output_port)
+            _rtspurl = f"rtsp://{socket.getfqdn()}:{self.config.args.output_port}/video"
             return ServiceInfo(
                 "_rtsp._udp.local.",
                 f"{_type} ({_subdesc}) ._rtsp._udp.local.",
@@ -45,6 +45,7 @@ class StreamAdvert(threading.Thread):
                 }
             )
         elif _type == 'webrtc':
+            _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else 6796)
             _wsEndpoint = f"wss://{socket.getfqdn()}:6796"
             return ServiceInfo(
                 "_webrtc._udp.local.",
