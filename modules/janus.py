@@ -53,7 +53,7 @@ class JanusHandler(tornado.websocket.WebSocketHandler):
                 "visiond-webrtc ({})._webrtc._udp.local.".format(_subdesc),
                 addresses=[socket.inet_aton('0.0.0.0')],
                 port=6796,
-                properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
+                properties={"port": 6796, "name": subdesc, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
             )
             self.zeroconf.register_service(_serviceinfo)
         
@@ -106,7 +106,7 @@ class JanusInterface(threading.Thread):
                     "visiond-webrtc ({})._webrtc._udp.local.".format(_subdesc),
                     addresses=[socket.inet_aton('0.0.0.0')],
                     port=6796,
-                    properties={"port": 6796, "name": self.config.args.name, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
+                    properties={"port": 6796, "name": subdesc, "service_type": "webrtc", "wsEndpoint": _wsEndpoint},
                 )
                 self.zeroconf.register_service(_serviceinfo)
         except Exception as e:

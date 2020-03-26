@@ -25,7 +25,8 @@ class StreamAdvert(threading.Thread):
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
 
-        self.service_info = self.build_service_info({"port": self.config.args.output_port, "name": self.config.args.name, "service_type": "visiond"})
+        subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+        self.service_info = self.build_service_info({"port": self.config.args.output_port, "name": subdesc, "service_type": "visiond"})
 
     def build_service_info(self, props, _type='visiond'):
         subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
