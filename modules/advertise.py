@@ -2,6 +2,7 @@ import threading
 import logging
 import socket
 import queue
+from uuid import uuid5
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 
@@ -25,18 +26,42 @@ class StreamAdvert(threading.Thread):
 
         self.ip_version = IPVersion.V4Only  # IPVersion.All
 
-        subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
-        self.service_info = self.build_service_info({"port": self.config.args.output_port, "name": subdesc, "service_type": "visiond"})
-
     def build_service_info(self, props, _type='visiond'):
-        subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
-        return ServiceInfo(
-            "_rtsp._udp.local.",
-            "{} ({}) ._rtsp._udp.local.".format(_type, subdesc),
-            addresses=[socket.inet_aton(self.config.args.output_dest)],
-            port=int(self.config.args.output_port),
-            properties=props,
-        )
+        _subdesc = self.config.args.name if self.config.args.name else socket.gethostname()
+        _rtspurl = f"rtsp://{socket.getfqdn()}:{self.config.args.output_port}/video"
+        if _type == 'visiond':
+            return ServiceInfo(
+                "_rtsp._udp.local.",
+                f"{_type} ({_subdesc}) ._rtsp._udp.local.",
+                addresses=[socket.inet_aton(self.config.args.output_dest)],
+                port=int(self.config.args.output_port),
+                properties={
+                    "port": self.config.args.output_port, 
+                    "name": _subdesc, 
+                    "service_type": "visiond",
+                    "rtspUrl": _rtspurl,
+                    "uuid": self.instance_uuid(_rtspurl),
+                }
+            )
+        elif _type == 'webrtc':
+            _wsEndpoint = f"wss://{socket.getfqdn()}:6796"
+            return ServiceInfo(
+                "_webrtc._udp.local.",
+                f"visiond-webrtc ({_subdesc})._webrtc._udp.local.",
+                addresses=[socket.inet_aton('0.0.0.0')],
+                port=6796,
+                properties={
+                    "port": 6796, 
+                    "name": _subdesc, 
+                    "service_type": "webrtc", 
+                    "wsEndpoint": _wsEndpoint,
+                    "uuid": self.instance_uuid(_wsEndpoint),
+                },
+            )
+
+    def instance_uuid(self, url):
+        # Create a repeatable uuid based on unique url
+        return str(uuid5(uuid.NAMESPACE_URL, url))
 
     def run(self):
         self.logger.info("Zeroconf advertisement thread is starting...")
