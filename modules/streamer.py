@@ -275,7 +275,7 @@ class Streamer(object):
             self.h264enc.set_property('bitrate', self.bitrate)
             self.h264enc.set_property('maxperf-enable', 1)
             self.h264enc.set_property('preset-level', 1) # 1 = UltraFast
-            self.h264enc.set_property('MeasureEncoderLatency', 1)
+            #self.h264enc.set_property('MeasureEncoderLatency', 1)
             self.h264enc.set_property('profile', 0) # 0 = BaseProfile which should usually be set for max compatibility particularly with webrtc. 2 = Main, 4 = High
 
         # OMX hardware
