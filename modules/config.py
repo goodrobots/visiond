@@ -19,7 +19,7 @@ class visiondConfig:
         self.parser = argparse.ArgumentParser(description='Visiond Video Streaming')
 
         # Setup common args
-        self.parser.add_argument('--bitrate', '-br', default='1000000', help="Target stream bitrate")
+        self.parser.add_argument('--bitrate', '-br', default='1000000', help="Target stream bitrate in bits/second")
         self.parser.add_argument('--brightness', '-b', default=0, help="Brightness - 0 is automatic")
         self.parser.add_argument('--camera_device', '-dev', help="Camera device, usually /dev/video0 for a single normal camera")
         self.parser.add_argument('--config', '-c', default=self.config_file, help="config file location, defaults to visiond directory")
@@ -42,7 +42,7 @@ class visiondConfig:
         self.parser.add_argument('--ssl_keyfile', '-sk', help="Set the path to SSL key for webrtc signalling server")
         self.parser.add_argument('--ssl_certfile', '-sc', help="Set the path to SSL cert for webrtc signalling server")
         self.parser.add_argument('--width', '-wt', default=640, help="Resolution width of video stream, must be valid for camera")
-        self.parser.add_argument('--zeroconf', '-z', default=1, help="Control if the service is advertised via zeroconf")
+        self.parser.add_argument('--zeroconf', '-z', default=True, help="Control if the service is advertised via zeroconf")
 
         self.args = self.parser.parse_args()
 
