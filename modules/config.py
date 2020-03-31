@@ -29,7 +29,7 @@ class visiondConfig:
         self.parser.add_argument('--format', '-f', help="Camera format, if not specified here will autodetect yuv->mjpeg->h264")
         self.parser.add_argument('--framerate', '-fr', default=30, help="Framerate of video stream, must be valid for camera")
         self.parser.add_argument('--height', '-ht', default=480, help="Resolution height of video stream, must be valid for camera")
-        self.parser.add_argument('--input', '-i', default="v4l2", help="Stream input type: v4l2 (fpv), appsrc (cv), nvarguscamerasrc (nvidia jetson csi)")
+        self.parser.add_argument('--input', '-i', default="v4l2src", help="Stream input type: v4l2src (fpv), appsrc (cv), nvarguscamerasrc (nvidia jetson csi)")
         self.parser.add_argument('--logdest', '-ld', default='both', help="Log destination - can be file, console or both (if run through systemd, console will log to system journal)")
         self.parser.add_argument('--logdir', '-li', default="/var/tmp/visiond", help="Log directory, if file logging set")
         self.parser.add_argument('--name', '-n', default=None, help="Descriptive name of the visiond instance / camera.  Used for display in zeroconf and -web interface.")

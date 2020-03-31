@@ -118,9 +118,9 @@ class visiondApp():
 
         # Log info
         self.camera_info()
-        
+
         # Try and autodetect Jetson/Tegra CSI connection
-        if self.driver == 'tegra-video' and ('input' not in self.config.args or not self.config.args.input):
+        if self.driver == 'tegra-video':
             self.logger.info('Nvidia Jetson/Tegra CSI connection detected, switching to nvarguscamerasrc')
             self.input = "nvarguscamerasrc"
         elif 'input' not in self.config.args or not self.config.args.input:
