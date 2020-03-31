@@ -81,18 +81,17 @@ class JanusInterface(threading.Thread):
         self._should_shutdown = threading.Event()
 
     def get_info(self):
-        url = 'https://localhost:6795/janus/info'
-        requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-        _request = requests.get(url='https://localhost:6795/janus/info', verify=False)
-        _data = _request.json()
         try:
-            #print("janus info: {}".format(_data))
+            url = 'https://localhost:6795/janus/info'
+            requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+            _request = requests.get(url='https://localhost:6795/janus/info', verify=False)
+            _data = _request.json()
             if _data['janus'] == 'server_info' and _data['server-name'] == 'Maverick':
                 self.logger.info("Maverick janus webrtc service detected, registering with zeroconf")
                 _serviceinfo = self.zeroconf.build_service_info({}, _type='webrtc')
                 self.zeroconf.register_service(_serviceinfo)
         except Exception as e:
-            pass
+            self.logger.info("Maverick janus webrtc service not detected, skipping zeroconf registration")
 
     def run(self):
         self.logger.info("Janus interface thread is starting...")
