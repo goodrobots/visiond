@@ -53,6 +53,7 @@ class StreamAdvert(threading.Thread):
                 addresses=[socket.inet_aton('0.0.0.0')],
                 port=6796,
                 properties={
+                    "hostname": socket.getfqdn(),
                     "port": 6796, 
                     "name": _subdesc, 
                     "service_type": "webrtc", 
