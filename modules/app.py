@@ -7,6 +7,7 @@ import os
 import re
 import time
 import v4l2
+import sdnotify
 import signal
 import sys
 import traceback
@@ -30,6 +31,7 @@ class visiondApp():
         self.zeroconf = None
         self.janus = None
         self._should_shutdown = False
+        self.notify = sdnotify.SystemdNotifier()
 
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
@@ -86,6 +88,12 @@ class visiondApp():
             self.pipeline.set_state(Gst.State.PLAYING)
         except Exception as e:
             raise ValueError('Error constructing manual pipeline specified: {}'.format(repr(e)))
+
+        # Inform systemd that start is complete
+        self.logger.info("Notifying systemd of startup completion")
+        self.notify.notify("READY=1")
+        self.notify.notify("STATUS=Manual Pipeline Initialisation Complete")
+
         while True:
             time.sleep(5)
 
@@ -194,6 +202,11 @@ class visiondApp():
             if self.zeroconf:
                 self.zeroconf.update({"stream":""})
             raise ValueError('Error creating {} stream: {}'.format(streamtype, repr(e)))
+
+        # Inform systemd that start is complete
+        self.logger.info("Notifying systemd of startup completion")
+        self.notify.notify("READY=1")
+        self.notify.notify("STATUS=Automatic Pipeline Initialisation Complete")
 
         while not self._should_shutdown:
             time.sleep(1)

@@ -10,6 +10,7 @@ ExecStart=/srv/visiond/visiond
 User=mav
 Restart=on-failure
 RestartSec=30
+Type=notify
 
 [Install]
 WantedBy=multi-user.target
