@@ -45,16 +45,16 @@ class StreamAdvert(threading.Thread):
                 }
             )
         elif _type == 'webrtc':
-            _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else 6796)
-            _wsEndpoint = f"wss://{socket.getfqdn()}:6796"
+            _subdesc = "{}:{}".format(socket.gethostname(), self.config.args.name if self.config.args.name else 6011)
+            _wsEndpoint = f"wss://{socket.getfqdn()}:6011"
             return ServiceInfo(
                 "_webrtc._udp.local.",
                 f"visiond-webrtc ({_subdesc})._webrtc._udp.local.",
                 addresses=[socket.inet_aton('0.0.0.0')],
-                port=6796,
+                port=6011,
                 properties={
                     "hostname": socket.getfqdn(),
-                    "port": 6796, 
+                    "port": 6011, 
                     "name": _subdesc, 
                     "service_type": "webrtc", 
                     "wsEndpoint": _wsEndpoint,
