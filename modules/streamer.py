@@ -45,7 +45,7 @@ class Streamer(object):
         # Start with creating a pipeline from source element
         if input == "appsrc":
             self.input_appsrc()
-        elif input == "v4l2src":
+        elif input == "v4l2src" or input == "v4l2":
             self.input_v4l2()
         elif input == "nvarguscamerasrc":
             self.input_tegra()
