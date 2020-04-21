@@ -74,6 +74,11 @@ class visiondApp():
                 self.logger.critical("Error constructing pipeline: {}, retrying in {} sec".format(repr(e), self.retry))
                 self.logger.critical(traceback.print_exc())
                 time.sleep(self.retry)
+                # Inform systemd that start is complete
+                self.logger.info("Notifying systemd of startup failure")
+                self.notify.notify("ERRNO=1")
+                self.notify.notify("STATUS=Error constructing pipeline: {}".format(repr(e)))
+                sys.exit(1)
 
     def manualconstruct(self):
         if self.config.args.pipeline_override not in self.config.args:
