@@ -39,6 +39,7 @@ class visiondConfig:
         self.parser.add_argument('--pipeline_override', '-po', help="Pipeline Override - This is used to provide a manual pipeline if the auto construction fails")
         self.parser.add_argument('--pixelformat', '-p', help="Pixel Format, could be (fourcc)YUV2, I420, RGB etc")
         self.parser.add_argument('--retry', '-r', default=10, help="Retry timeout - number of seconds visiond will wait before trying to recreate pipeline after error")
+        self.parser.add_argument('--rotate', '-ro', default=0, help="Rotate image")
         self.parser.add_argument('--ssl_keyfile', '-sk', help="Set the path to SSL key for webrtc signalling server")
         self.parser.add_argument('--ssl_certfile', '-sc', help="Set the path to SSL cert for webrtc signalling server")
         self.parser.add_argument('--width', '-wt', default=640, help="Resolution width of video stream, must be valid for camera")

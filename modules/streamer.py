@@ -12,7 +12,8 @@ from .webrtc_signalserver import *
 
 gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
-from gi.repository import GLib, Gst, GstRtspServer
+gi.require_version('GstVideo', '1.0')
+from gi.repository import GLib, Gst, GstRtspServer, GstVideo
 Gst.init(None)
 
 ### Streamer Class to build up Gstreamer pipeline from in to out
@@ -66,6 +67,12 @@ class Streamer(object):
         else:
             self.logger.critical("Stream starting with unrecognised video format: " + str(format))
             return
+
+        # Next insert processing components, eg. rotation
+        # First set the processing_attach point which self.rotate() can override if successful
+        self.processing_attach = self.source_attach
+        if int(self.config.args.rotate):
+            self.rotate()
         
         # Next choose the encoder
         if encoder == format:
@@ -241,7 +248,50 @@ class Streamer(object):
         self.pipeline.add(capsfilter)
         self.source.link(capsfilter)
         self.source_attach = capsfilter
-        
+    
+    ### Processing methods
+    def rotate(self):
+        self.logger.info(f"Attaching component to rotate image by {self.config.args.rotate} degrees")
+        # If nvidia hardware component is available then use that in preference
+
+        if Gst.ElementFactory.find("nvvidconv"):
+            rotatecmp = Gst.ElementFactory.make("nvvidconv", "rotate")
+            # Define a dict that provides lookup mappings of rotation degrees to flip-method values
+            method_table = {
+                270: 1,
+                180: 2,
+                90: 3
+            }
+            try:
+                rotatecmp.set_property('flip-method', method_table[self.config.args.rotate])
+                # Replace source_attach with rotation component for encoders to attach directly to
+                self.pipeline.add(rotatecmp)
+                self.source_attach.link(rotatecmp)
+                rotate_capsfilter = Gst.ElementFactory.make("capsfilter", "rotate_capsfilter")
+                rotate_capsfilter.set_property('caps', Gst.Caps.from_string('video/x-raw(memory:NVMM), format=(string)I420'))
+                self.pipeline.add(rotate_capsfilter)
+                rotatecmp.link(rotate_capsfilter)                
+                self.processing_attach = rotate_capsfilter
+            except:
+                self.logger.warning(f"Rotation value {self.config.args.rotate} cannot be used with nvidia hardware, must be 90, 180 or 270 degrees exactly")
+        else:
+            self.logger.info('eek')
+            rotatecmp = Gst.ElementFactory.make("videoflip", "rotate")
+            # Define a dict that provides lookup mappings of rotation degrees to video-direction values
+            method_table = {
+                90: 1,
+                180: 2,
+                270: 3
+            }
+            try:
+                rotatecmp.set_property('video-direction', method_table[self.config.args.rotate])
+                # Replace source_attach with rotation component for encoders to attach directly to
+                self.pipeline.add(rotatecmp)
+                self.source_attach.link(rotatecmp)
+                self.processing_attach = rotatecmp
+            except:
+                self.logger.warning(f"Rotation value {self.config.args.rotate} cannot be used with nvidia hardware, must be 90, 180 or 270 degrees exactly")
+
     ### Encoding methods
     def encode_h264(self):
         self.logger.info("Attaching encoding 'h264'")
@@ -302,7 +352,7 @@ class Streamer(object):
 
         # Attach the h264 element
         self.pipeline.add(self.h264enc)
-        self.source_attach.link(self.h264enc)
+        self.processing_attach.link(self.h264enc)
 
         # If using omx hardware encoder, specify caps explicitly otherwise it can get upset when using rtspserver
         if _encoder_type == "omxh264enc":
@@ -317,13 +367,13 @@ class Streamer(object):
     def encode_mjpeg(self):
         # TODO: Add actual mjpeg encoding, currently we just pass through the source to the encoder attach points
         if self.format == self.encoder:
-            self.encode_attach = self.source_attach
+            self.encode_attach = self.processing_attach
         else:
-            self.encode_attach = self.source_attach
+            self.encode_attach = self.processing_attach
         
     def encode_yuv(self):
         # Nothing todo, just hang the source onto the encoder attach point
-        self.encode_attach = self.source_attach
+        self.encode_attach = self.processing_attach
 
     ### Payload methods
     def payload_h264(self):
