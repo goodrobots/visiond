@@ -46,7 +46,10 @@ class JanusHandler(tornado.websocket.WebSocketHandler):
         self.logger.debug("got message %r", message)
         if parsed['type'] == 256:
             _serviceinfo = self.zeroconf.build_service_info({}, _type='webrtc')
-            self.zeroconf.register_service(_serviceinfo)
+            try:
+                self.zeroconf.register_service(_serviceinfo)
+            except Exception as e:
+                self.logger.warning(f"Error trying to advertise service: {repr(e)}")
         
     def get_compression_options(self):
         return {}
